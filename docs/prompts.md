@@ -8,3 +8,6 @@ awesome landing page design! now please use the same rigorous and meticulous app
 3. add / update a section to list and describe the files in the codebase file hierarchy 
 4. Current features implemented (partially or fully), Roadmap for suggested improvements divided into two sections, one for the immediate and one for the long-term goals.
 5. Clear and detailed deployment guide starting from the GitHub repository
+
+---
+awesome job! please put on the same deep-thinking hat to deeply and thoroughly explore carefully and systematically to create a detailed and comprehensive `Project Architecture Document` in markdown document that matches your re-imagined PRD and README.md. this document will help any new developer to build the whole codebase with confidence and accuracy, clear and logical description that gives no ambiguity to execute the coding. think carefully and deeply how you will build the codebase step by step, then incorporate the steps as detailed execution plan in one section of the `Project Architecture Document`. the document must be faithful to the PRD and README details. please try your very best so as not to disappoint me. proceed carefully so as not to miss out important details in the codebase building process and guideline. thank you and good luck!
