@@ -70,8 +70,8 @@ graph TD
     end
     
     subgraph "🚀 app/ (Next.js 14 App Router)"
-        G[app/] --> H[(auth)/]
-        G --> I[(shop)/]
+        G[app/] --> H[auth/]
+        G --> I[shop/]
         G --> J[account/]
         G --> K[api/]
         G --> L[layout.tsx]
@@ -114,7 +114,7 @@ graph TD
         AJ --> AM[validations/]
         AK --> AN[shop.ts]
     end
-    
+
     click A "https://github.com/nordeim/LuxeVerse-Quantum" _blank
     click L "https://github.com/nordeim/LuxeVerse-Quantum/blob/main/app/layout.tsx" _blank
     click M "https://github.com/nordeim/LuxeVerse-Quantum/blob/main/app/page.tsx" _blank
