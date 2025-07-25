@@ -1,0 +1,472 @@
+// prisma/schema.prisma
+// =============================================
+// LuxeVerse Prisma Schema
+// Matches the comprehensive PostgreSQL schema
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), pgcrypto, pgTrgm(map: "pg_trgm"), vector, postgis]
+}
+
+// =============================================
+// ENUMS
+// =============================================
+
+enum UserRole {
+  GUEST
+  CUSTOMER
+  VIP
+  ADMIN
+  SUPER_ADMIN
+
+  @@map("user_role")
+}
+
+enum MembershipTier {
+  PEARL      // Free tier
+  SAPPHIRE   // $99/month
+  DIAMOND    // $299/month
+  OBSIDIAN   // $499/month - Invite only
+
+  @@map("membership_tier")
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+  ARCHIVED
+
+  @@map("product_status")
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PROCESSING
+  PAYMENT_FAILED
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  RETURNED
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+
+  @@map("review_status")
+}
+
+enum AiInteractionType {
+  STYLE_QUIZ
+  VISUAL_SEARCH
+  CHAT
+  RECOMMENDATION
+  OUTFIT_BUILDER
+  TREND_ALERT
+
+  @@map("ai_interaction_type")
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  PRICE_DROP
+  BACK_IN_STOCK
+  EXCLUSIVE_ACCESS
+  MEMBERSHIP_UPDATE
+  AI_RECOMMENDATION
+  SOCIAL_INTERACTION
+
+  @@map("notification_type")
+}
+
+// =============================================
+// CORE USER MODELS
+// =============================================
+
+model User {
+  id                     String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                  String             @unique @db.VarChar(255)
+  emailVerified          DateTime?          @map("email_verified")
+  passwordHash           String?            @map("password_hash") @db.VarChar(255)
+  name                   String?            @db.VarChar(255)
+  avatarUrl              String?            @map("avatar_url") @db.VarChar(500)
+  phone                  String?            @db.VarChar(50)
+  phoneVerified          DateTime?          @map("phone_verified")
+  role                   UserRole           @default(CUSTOMER)
+  membershipTier         MembershipTier     @default(PEARL) @map("membership_tier")
+  membershipExpiresAt    DateTime?          @map("membership_expires_at")
+  
+  // Preferences
+  preferredCurrency      String             @default("USD") @map("preferred_currency") @db.Char(3)
+  preferredLanguage      String             @default("en") @map("preferred_language") @db.VarChar(10)
+  timezone               String             @default("UTC") @db.VarChar(50)
+  
+  // AI & Personalization
+  styleProfileCompleted  Boolean            @default(false) @map("style_profile_completed")
+  aiConsent              Boolean            @default(true) @map("ai_consent")
+  personalizationLevel   Int                @default(5) @map("personalization_level")
+  
+  // Metadata
+  lastLoginAt            DateTime?          @map("last_login_at")
+  loginCount             Int                @default(0) @map("login_count")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at")
+  deletedAt              DateTime?          @map("deleted_at")
+
+  // Relations
+  oauthAccounts          OAuthAccount[]
+  sessions               Session[]
+  styleProfile           StyleProfile?
+  aiInteractions         AiInteraction[]
+  carts                  Cart[]
+  wishlists              Wishlist[]
+  orders                 Order[]
+  reviews                Review[]
+  addresses              Address[]
+  paymentMethods         PaymentMethod[]
+  notifications          Notification[]
+  membershipTransactions MembershipTransaction[]
+  loyaltyPoints          LoyaltyPoint[]
+  productViews           ProductView[]
+  searchLogs             SearchLog[]
+  auditLogs              AuditLog[]
+
+  @@index([email], map: "idx_users_email")
+  @@index([membershipTier, membershipExpiresAt], map: "idx_users_membership")
+  @@index([createdAt(sort: Desc)], map: "idx_users_created_at")
+  @@map("users")
+}
+
+model OAuthAccount {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  provider          String    @db.VarChar(50)
+  providerAccountId String    @map("provider_account_id") @db.VarChar(255)
+  accessToken       String?   @map("access_token") @db.Text
+  refreshToken      String?   @map("refresh_token") @db.Text
+  expiresAt         DateTime? @map("expires_at")
+  tokenType         String?   @map("token_type") @db.VarChar(50)
+  scope             String?   @db.Text
+  idToken           String?   @map("id_token") @db.Text
+  sessionState      String?   @map("session_state") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
+model Session {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  sessionToken String    @unique @map("session_token") @db.VarChar(255)
+  ipAddress    String?   @map("ip_address") @db.Inet
+  userAgent    String?   @map("user_agent") @db.Text
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken], map: "idx_sessions_token")
+  @@index([expiresAt], map: "idx_sessions_expires")
+  @@map("sessions")
+}
+
+// =============================================
+// AI & PERSONALIZATION MODELS
+// =============================================
+
+model StyleProfile {
+  id                     String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                 String    @unique @map("user_id") @db.Uuid
+  
+  // Style preferences
+  stylePersonas          String[]  @map("style_personas")
+  favoriteColors         String[]  @map("favorite_colors")
+  avoidedColors          String[]  @map("avoided_colors")
+  preferredBrands        String[]  @map("preferred_brands")
+  avoidedMaterials       String[]  @map("avoided_materials")
+  
+  // Size information (encrypted)
+  measurements           Json?     // Encrypted JSON with body measurements
+  typicalSizes           Json?     @map("typical_sizes") // {tops: 'M', bottoms: '32', shoes: '10'}
+  
+  // Budget preferences
+  minPricePreference     Decimal?  @map("min_price_preference") @db.Decimal(10,2)
+  maxPricePreference     Decimal?  @map("max_price_preference") @db.Decimal(10,2)
+  sweetSpotPrice         Decimal?  @map("sweet_spot_price") @db.Decimal(10,2)
+  
+  // AI embeddings (using String for now, will be converted to vector in production)
+  styleEmbedding         String?   @map("style_embedding") @db.Text
+  colorEmbedding         String?   @map("color_embedding") @db.Text
+  brandEmbedding         String?   @map("brand_embedding") @db.Text
+  
+  // Behavioral data
+  prefersSustainable     Boolean   @default(false) @map("prefers_sustainable")
+  prefersExclusive       Boolean   @default(false) @map("prefers_exclusive")
+  earlyAdopterScore      Decimal   @default(0.5) @map("early_adopter_score") @db.Decimal(3,2)
+  luxuryAffinityScore    Decimal   @default(0.5) @map("luxury_affinity_score") @db.Decimal(3,2)
+  
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("style_profiles")
+}
+
+model AiInteraction {
+  id               String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId           String?             @map("user_id") @db.Uuid
+  sessionId        String?             @map("session_id") @db.Uuid
+  interactionType  AiInteractionType   @map("interaction_type")
+  
+  // Interaction data
+  inputData        Json?               @map("input_data")
+  outputData       Json?               @map("output_data")
+  
+  // Performance metrics
+  responseTimeMs   Int?                @map("response_time_ms")
+  confidenceScore  Decimal?            @map("confidence_score") @db.Decimal(3,2)
+  userSatisfaction Int?                @map("user_satisfaction")
+  
+  // Metadata
+  modelVersion     String?             @map("model_version") @db.VarChar(50)
+  createdAt        DateTime            @default(now()) @map("created_at")
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_ai_interactions_user")
+  @@index([interactionType, createdAt(sort: Desc)], map: "idx_ai_interactions_type")
+  @@map("ai_interactions")
+}
+
+// =============================================
+// MINIMAL PRODUCT MODELS (for authentication phase)
+// =============================================
+
+model Category {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  slug        String   @unique @db.VarChar(255)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("categories")
+}
+
+model Product {
+  id          String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sku         String        @unique @db.VarChar(100)
+  slug        String        @unique @db.VarChar(255)
+  name        String        @db.VarChar(255)
+  description String?       @db.Text
+  price       Decimal       @db.Decimal(10,2)
+  status      ProductStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@map("products")
+}
+
+// =============================================
+// CART & ORDER MODELS (minimal for auth phase)
+// =============================================
+
+model Cart {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  sessionId String?  @map("session_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("carts")
+}
+
+model Wishlist {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @default("My Wishlist") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wishlists")
+}
+
+model Order {
+  id           String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  orderNumber  String      @unique @map("order_number") @db.VarChar(20)
+  userId       String      @map("user_id") @db.Uuid
+  status       OrderStatus @default(PENDING)
+  total        Decimal     @db.Decimal(10,2)
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("orders")
+}
+
+// =============================================
+// REMAINING MINIMAL MODELS
+// =============================================
+
+model Review {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  rating    Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("reviews")
+}
+
+model Address {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  type         String   @default("shipping") @db.VarChar(50)
+  isDefault    Boolean  @default(false) @map("is_default")
+  firstName    String   @map("first_name") @db.VarChar(100)
+  lastName     String   @map("last_name") @db.VarChar(100)
+  addressLine1 String   @map("address_line1") @db.VarChar(255)
+  city         String   @db.VarChar(100)
+  postalCode   String   @map("postal_code") @db.VarChar(20)
+  countryCode  String   @map("country_code") @db.Char(2)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+model PaymentMethod {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String   @db.VarChar(50)
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payment_methods")
+}
+
+model Notification {
+  id        String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String           @db.VarChar(255)
+  message   String           @db.Text
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model MembershipTransaction {
+  id        String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  type      String         @db.VarChar(50)
+  toTier    MembershipTier @map("to_tier")
+  amount    Decimal?       @db.Decimal(10,2)
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("membership_transactions")
+}
+
+model LoyaltyPoint {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  type         String   @db.VarChar(50)
+  points       Int
+  balanceAfter Int      @map("balance_after")
+  source       String?  @db.VarChar(50)
+  description  String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("loyalty_points")
+}
+
+model ProductView {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  sessionId String?  @map("session_id") @db.Uuid
+  source    String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User?    @relation(fields: [userId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@map("product_views")
+}
+
+model SearchLog {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  sessionId String?  @map("session_id") @db.Uuid
+  query     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User?    @relation(fields: [userId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@map("search_logs")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.Uuid
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_audit_logs_user")
+  @@index([entityType, entityId, createdAt(sort: Desc)], map: "idx_audit_logs_entity")
+  @@map("audit_logs")
+}
