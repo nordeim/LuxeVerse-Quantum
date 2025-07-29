@@ -1,0 +1,440 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================= */
+/* CSS VARIABLES & THEME CONFIGURATION           */
+/* ============================================= */
+
+@layer base {
+  :root {
+    /* Background & Foreground */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    
+    /* Card */
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    
+    /* Primary */
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    
+    /* Secondary */
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    
+    /* Muted */
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    
+    /* Accent */
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    
+    /* Destructive */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    
+    /* Border, Input, Ring */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+    
+    /* Radius */
+    --radius: 0.5rem;
+    
+    /* LuxeVerse Custom Colors */
+    --luxury-gold: 51 100% 50%;
+    --luxury-gold-light: 51 100% 85%;
+    --luxury-gold-dark: 43 100% 35%;
+    --luxury-platinum: 60 2% 89%;
+    --luxury-platinum-light: 60 2% 95%;
+    --luxury-platinum-dark: 0 0% 75%;
+    --luxury-obsidian: 240 3% 4%;
+    --luxury-obsidian-light: 240 3% 10%;
+    --luxury-obsidian-dark: 0 0% 0%;
+    
+    /* Neon Colors */
+    --neon-pink: 340 100% 50%;
+    --neon-cyan: 190 100% 50%;
+    --neon-lime: 150 100% 50%;
+    --neon-purple: 270 100% 50%;
+    --neon-orange: 25 100% 50%;
+  }
+  
+  .dark {
+    /* Background & Foreground */
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    
+    /* Card */
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    
+    /* Popover */
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    
+    /* Primary */
+    --primary: 210 20% 98%;
+    --primary-foreground: 220.9 39.3% 11%;
+    
+    /* Secondary */
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    
+    /* Muted */
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    
+    /* Accent */
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    
+    /* Destructive */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    
+    /* Border, Input, Ring */
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+  }
+}
+
+/* ============================================= */
+/* BASE STYLES                                   */
+/* ============================================= */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Typography */
+  h1, h2, h3, h4, h5, h6 {
+    @apply scroll-m-20 tracking-tight;
+  }
+  
+  h1 {
+    @apply text-4xl font-extrabold lg:text-5xl;
+  }
+  
+  h2 {
+    @apply text-3xl font-semibold;
+  }
+  
+  h3 {
+    @apply text-2xl font-semibold;
+  }
+  
+  h4 {
+    @apply text-xl font-semibold;
+  }
+  
+  p {
+    @apply leading-7 [&:not(:first-child)]:mt-6;
+  }
+  
+  /* Links */
+  a {
+    @apply transition-colors hover:text-primary;
+  }
+  
+  /* Code */
+  code {
+    @apply relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold;
+  }
+  
+  /* Blockquote */
+  blockquote {
+    @apply mt-6 border-l-2 pl-6 italic;
+  }
+  
+  /* Lists */
+  ul {
+    @apply my-6 ml-6 list-disc [&>li]:mt-2;
+  }
+  
+  /* Tables */
+  table {
+    @apply w-full;
+  }
+  
+  tr {
+    @apply m-0 border-t p-0 even:bg-muted;
+  }
+  
+  th {
+    @apply border px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right;
+  }
+  
+  td {
+    @apply border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right;
+  }
+}
+
+/* ============================================= */
+/* COMPONENT STYLES                              */
+/* ============================================= */
+
+@layer components {
+  /* Container */
+  .container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* Buttons */
+  .btn-luxury {
+    @apply relative overflow-hidden bg-gradient-to-r from-luxury-gold to-luxury-gold-light 
+           text-luxury-obsidian font-semibold transition-all duration-300 
+           hover:from-luxury-gold-light hover:to-luxury-gold hover:shadow-xl;
+  }
+  
+  .btn-neon {
+    @apply relative overflow-hidden bg-gradient-to-r from-neon-pink to-neon-purple 
+           text-white font-semibold transition-all duration-300 
+           hover:shadow-[0_0_20px_rgba(255,0,110,0.5)] hover:scale-105;
+  }
+  
+  /* Cards */
+  .card-luxury {
+    @apply relative overflow-hidden rounded-lg border border-luxury-gold/20 
+           bg-gradient-to-br from-luxury-obsidian to-luxury-obsidian-light 
+           p-6 shadow-xl backdrop-blur-sm;
+  }
+  
+  /* Gradients */
+  .gradient-luxury {
+    @apply bg-gradient-to-r from-luxury-gold via-luxury-platinum to-luxury-gold bg-clip-text text-transparent;
+  }
+  
+  .gradient-neon {
+    @apply bg-gradient-to-r from-neon-pink via-neon-purple to-neon-cyan bg-clip-text text-transparent;
+  }
+  
+  /* Glass Effect */
+  .glass {
+    @apply backdrop-blur-md bg-white/10 border border-white/20 shadow-xl;
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-md bg-black/10 border border-black/20 shadow-xl;
+  }
+  
+  /* Loading States */
+  .skeleton {
+    @apply animate-pulse rounded-md bg-muted;
+  }
+  
+  .shimmer {
+    @apply relative overflow-hidden before:absolute before:inset-0 
+           before:-translate-x-full before:animate-shimmer 
+           before:bg-gradient-to-r before:from-transparent 
+           before:via-white/10 before:to-transparent;
+  }
+  
+  /* Focus States */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+  }
+  
+  /* Scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--luxury-gold)) hsl(var(--luxury-obsidian));
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-luxury-obsidian;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-luxury-gold rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-luxury-gold-light;
+  }
+}
+
+/* ============================================= */
+/* UTILITY STYLES                                */
+/* ============================================= */
+
+@layer utilities {
+  /* Text Balance */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Gradient Animation */
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-xy 15s ease infinite;
+  }
+  
+  /* Perspective */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  /* Mask */
+  .mask-gradient-to-b {
+    mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  }
+  
+  .mask-gradient-to-t {
+    mask-image: linear-gradient(to top, black 0%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  }
+  
+  /* Selection */
+  .selection-luxury::selection {
+    @apply bg-luxury-gold text-luxury-obsidian;
+  }
+  
+  .selection-neon::selection {
+    @apply bg-neon-pink text-white;
+  }
+  
+  /* No Scrollbar */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Debug */
+  .debug-red {
+    @apply border border-red-500;
+  }
+  
+  .debug-blue {
+    @apply border border-blue-500;
+  }
+  
+  .debug-green {
+    @apply border border-green-500;
+  }
+}
+
+/* ============================================= */
+/* ANIMATIONS                                    */
+/* ============================================= */
+
+@layer utilities {
+  /* Entrance Animations */
+  .animate-in {
+    animation-name: enter;
+    animation-duration: 0.5s;
+    animation-fill-mode: both;
+  }
+  
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* Hover Effects */
+  .hover-lift {
+    @apply transition-transform duration-300 hover:-translate-y-1;
+  }
+  
+  .hover-grow {
+    @apply transition-transform duration-300 hover:scale-105;
+  }
+  
+  .hover-shrink {
+    @apply transition-transform duration-300 hover:scale-95;
+  }
+  
+  /* Glow Effects */
+  .glow-luxury {
+    @apply hover:shadow-[0_0_20px_rgba(255,215,0,0.3)];
+  }
+  
+  .glow-neon-pink {
+    @apply hover:shadow-[0_0_20px_rgba(255,0,110,0.5)];
+  }
+  
+  .glow-neon-cyan {
+    @apply hover:shadow-[0_0_20px_rgba(0,217,255,0.5)];
+  }
+}
+
+/* ============================================= */
+/* RESPONSIVE UTILITIES                          */
+/* ============================================= */
+
+@layer utilities {
+  /* Safe Area Insets */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ============================================= */
+/* PRINT STYLES                                  */
+/* ============================================= */
+
+@media print {
+  body {
+    @apply text-black bg-white;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  a {
+    @apply text-black underline;
+  }
+  
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+  }
+}
