@@ -1,0 +1,2771 @@
+# 🚀 LuxeVerse Quantum - Phase 1: Foundation & Infrastructure
+
+<think>
+Phase 1 is the most critical phase - it sets the foundation for everything else. I need to ensure:
+1. All dependencies are properly versioned and compatible
+2. TypeScript configuration is strict but practical
+3. The database schema is the exact approved version from the PRD
+4. All configurations work together seamlessly
+5. The project can run without errors immediately
+
+Let me create each file with meticulous attention to detail.
+</think>
+
+## Phase 1: Complete Implementation Files
+
+### 📋 1.1 `/package.json`
+**Purpose**: Define all project dependencies with exact versions for stability
+
+```json
+{
+  "name": "luxeverse-quantum",
+  "version": "2.0.0",
+  "description": "The cinematic luxury e-commerce experience",
+  "private": true,
+  "author": "LuxeVerse Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "type-check": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:generate": "prisma generate",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "analyze": "ANALYZE=true next build",
+    "prepare": "husky install",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.4.1",
+    "@hookform/resolvers": "^3.9.0",
+    "@prisma/client": "^5.17.0",
+    "@radix-ui/react-avatar": "^1.1.0",
+    "@radix-ui/react-checkbox": "^1.1.1",
+    "@radix-ui/react-dialog": "^1.1.1",
+    "@radix-ui/react-dropdown-menu": "^2.1.1",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-popover": "^1.1.1",
+    "@radix-ui/react-progress": "^1.1.0",
+    "@radix-ui/react-scroll-area": "^1.1.0",
+    "@radix-ui/react-select": "^2.1.1",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slider": "^1.2.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.0",
+    "@radix-ui/react-toast": "^1.2.1",
+    "@radix-ui/react-tooltip": "^1.1.2",
+    "@stripe/react-stripe-js": "^2.7.3",
+    "@stripe/stripe-js": "^4.1.0",
+    "@t3-oss/env-nextjs": "^0.10.1",
+    "@tanstack/react-query": "^5.51.1",
+    "@tanstack/react-query-devtools": "^5.51.1",
+    "@trpc/client": "11.0.0-rc.446",
+    "@trpc/next": "11.0.0-rc.446",
+    "@trpc/react-query": "11.0.0-rc.446",
+    "@trpc/server": "11.0.0-rc.446",
+    "@upstash/redis": "^1.34.0",
+    "@vercel/analytics": "^1.3.1",
+    "@vercel/speed-insights": "^1.0.12",
+    "bcryptjs": "^2.4.3",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "framer-motion": "^11.3.8",
+    "lucide-react": "^0.414.0",
+    "nanoid": "^5.0.7",
+    "next": "14.2.5",
+    "next-auth": "^4.24.7",
+    "next-themes": "^0.3.0",
+    "openai": "^4.55.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.52.1",
+    "react-hot-toast": "^2.4.1",
+    "resend": "^3.4.0",
+    "sharp": "^0.33.4",
+    "stripe": "^16.2.0",
+    "superjson": "^2.2.1",
+    "tailwind-merge": "^2.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.23.8",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "@playwright/test": "^1.45.3",
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.13",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.17.0",
+    "@typescript-eslint/parser": "^7.17.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "husky": "^9.1.4",
+    "jsdom": "^24.1.1",
+    "lint-staged": "^15.2.7",
+    "postcss": "^8.4.40",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.5",
+    "prisma": "^5.17.0",
+    "tailwindcss": "^3.4.7",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.5",
+    "vitest": "^2.0.4"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  }
+}
+```
+
+---
+
+### 🔧 1.2 `/tsconfig.json`
+**Purpose**: Strict TypeScript configuration for maximum type safety
+
+```json
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "preserve",
+    "module": "esnext",
+    
+    /* Modules */
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/public/*": ["./public/*"]
+    },
+    "resolveJsonModule": true,
+    
+    /* JavaScript Support */
+    "allowJs": true,
+    "checkJs": false,
+    
+    /* Emit */
+    "noEmit": true,
+    "sourceMap": true,
+    "removeComments": true,
+    "downlevelIteration": true,
+    
+    /* Interop Constraints */
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* Type Checking */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    
+    /* Completeness */
+    "skipLibCheck": true,
+    
+    /* Experimental */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    
+    /* Next.js */
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "next.config.mjs"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "out",
+    "dist",
+    "build",
+    "coverage",
+    ".turbo"
+  ]
+}
+```
+
+---
+
+### ⚙️ 1.3 `/next.config.mjs`
+**Purpose**: Next.js configuration with performance optimizations
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  poweredByHeader: false,
+  
+  // Image optimization
+  images: {
+    domains: [
+      'cdn.luxeverse.ai',
+      'images.unsplash.com',
+      'res.cloudinary.com',
+      'lh3.googleusercontent.com', // Google OAuth
+      'avatars.githubusercontent.com', // GitHub OAuth
+    ],
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
+  },
+  
+  // Experimental features
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'],
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+  },
+  
+  // Security headers
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains; preload',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Credentials',
+            value: 'true',
+          },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET,DELETE,PATCH,POST,PUT',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version',
+          },
+        ],
+      },
+    ]
+  },
+  
+  // Redirects
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/signin',
+        destination: '/login',
+        permanent: true,
+      },
+      {
+        source: '/signup',
+        destination: '/register',
+        permanent: true,
+      },
+    ]
+  },
+  
+  // Rewrites for external services
+  async rewrites() {
+    return [
+      {
+        source: '/ingest/:path*',
+        destination: 'https://app.posthog.com/:path*', // Analytics
+      },
+    ]
+  },
+  
+  // Environment variables
+  env: {
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api',
+  },
+  
+  // Webpack configuration
+  webpack: (config, { dev, isServer }) => {
+    // Optimize bundle size
+    if (!dev && !isServer) {
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          default: false,
+          vendors: false,
+          vendor: {
+            name: 'vendor',
+            chunks: 'all',
+            test: /node_modules/,
+            priority: 20,
+          },
+          common: {
+            name: 'common',
+            minChunks: 2,
+            chunks: 'all',
+            priority: 10,
+            reuseExistingChunk: true,
+            enforce: true,
+          },
+        },
+      }
+    }
+    
+    return config
+  },
+}
+
+export default nextConfig
+```
+
+---
+
+### 🔐 1.4 `/.env.example`
+**Purpose**: Environment variables template (create `.env.local` from this)
+
+```bash
+# =============================================
+# DATABASE
+# =============================================
+# PostgreSQL connection string
+DATABASE_URL="postgresql://postgres:password@localhost:5432/luxeverse_dev?schema=public"
+
+# =============================================
+# AUTHENTICATION
+# =============================================
+# NextAuth.js
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-super-secret-key-here-generate-with-openssl"
+
+# OAuth Providers
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+
+# =============================================
+# PAYMENT PROCESSING
+# =============================================
+# Stripe
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
+
+# =============================================
+# EMAIL SERVICE
+# =============================================
+# Resend
+RESEND_API_KEY="re_..."
+EMAIL_FROM="noreply@luxeverse.ai"
+
+# SMTP (alternative)
+EMAIL_SERVER_HOST="smtp.resend.com"
+EMAIL_SERVER_PORT="465"
+EMAIL_SERVER_USER=""
+EMAIL_SERVER_PASSWORD=""
+
+# =============================================
+# AI SERVICES
+# =============================================
+# OpenAI
+OPENAI_API_KEY="sk-..."
+OPENAI_ORG_ID=""
+
+# =============================================
+# SEARCH
+# =============================================
+# Algolia
+NEXT_PUBLIC_ALGOLIA_APP_ID=""
+NEXT_PUBLIC_ALGOLIA_SEARCH_KEY=""
+ALGOLIA_ADMIN_KEY=""
+ALGOLIA_INDEX_NAME="products"
+
+# =============================================
+# STORAGE
+# =============================================
+# AWS S3
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY=""
+AWS_REGION="us-east-1"
+S3_BUCKET_NAME="luxeverse-media"
+
+# Cloudinary (alternative)
+CLOUDINARY_CLOUD_NAME=""
+CLOUDINARY_API_KEY=""
+CLOUDINARY_API_SECRET=""
+
+# =============================================
+# CACHE
+# =============================================
+# Upstash Redis
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+
+# =============================================
+# ANALYTICS & MONITORING
+# =============================================
+# Vercel Analytics
+NEXT_PUBLIC_VERCEL_ANALYTICS_ID=""
+
+# PostHog
+NEXT_PUBLIC_POSTHOG_KEY=""
+NEXT_PUBLIC_POSTHOG_HOST="https://app.posthog.com"
+
+# Sentry
+SENTRY_DSN=""
+SENTRY_ORG=""
+SENTRY_PROJECT=""
+SENTRY_AUTH_TOKEN=""
+
+# =============================================
+# FEATURE FLAGS
+# =============================================
+NEXT_PUBLIC_ENABLE_AI_CHAT="true"
+NEXT_PUBLIC_ENABLE_AR_TRYON="false"
+NEXT_PUBLIC_ENABLE_LIVE_SHOPPING="false"
+
+# =============================================
+# DEVELOPMENT
+# =============================================
+# Prisma
+PRISMA_STUDIO_PORT="5555"
+
+# Logging
+LOG_LEVEL="info"
+NEXT_PUBLIC_LOG_LEVEL="error"
+```
+
+---
+
+### 🗄️ 1.5 `/prisma/schema.prisma`
+**Purpose**: Complete database schema (exact copy from PRD)
+
+```prisma
+// =============================================
+// LuxeVerse Prisma Schema - Version 4.0 (Final)
+// Comprehensive schema for luxury e-commerce platform
+// with AI personalization, AR/3D features, and membership system
+// 
+// IMPORTANT: This schema includes both:
+// 1. Existing tables from database_schema.sql.txt
+// 2. New v2.0 feature proposals (marked with NEW)
+// =============================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions", "relationJoins"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), pgCrypto(map: "pgcrypto"), pgTrgm(map: "pg_trgm"), vector, postgis]
+}
+
+// =============================================
+// ENUMS AND CUSTOM TYPES
+// =============================================
+
+enum UserRole {
+  GUEST
+  CUSTOMER
+  VIP
+  ADMIN
+  SUPER_ADMIN
+
+  @@map("user_role")
+}
+
+enum MembershipTier {
+  PEARL      // Free tier
+  SAPPHIRE   // $99/month
+  DIAMOND    // $299/month
+  OBSIDIAN   // $499/month - Invite only
+
+  @@map("membership_tier")
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+  ARCHIVED
+
+  @@map("product_status")
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PROCESSING
+  PAYMENT_FAILED
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  RETURNED
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+
+  @@map("payment_status")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+
+  @@map("review_status")
+}
+
+enum AiInteractionType {
+  STYLE_QUIZ
+  VISUAL_SEARCH
+  CHAT
+  RECOMMENDATION
+  OUTFIT_BUILDER
+  TREND_ALERT
+  SIZE_ADVISOR // NEW
+
+  @@map("ai_interaction_type")
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  PRICE_DROP
+  BACK_IN_STOCK
+  EXCLUSIVE_ACCESS
+  MEMBERSHIP_UPDATE
+  AI_RECOMMENDATION
+  SOCIAL_INTERACTION
+  LIVE_EVENT // NEW
+
+  @@map("notification_type")
+}
+
+// NEW ENUMS FOR V2.0 FEATURES
+enum TranslationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("translation_status")
+}
+
+enum LiveEventStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+
+  @@map("live_event_status")
+}
+
+// =============================================
+// CORE USER TABLES
+// =============================================
+
+model User {
+  id                     String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                  String    @unique @db.VarChar(255)
+  emailVerified          DateTime? @map("email_verified") @db.Timestamptz
+  passwordHash           String?   @map("password_hash") @db.VarChar(255)
+  name                   String?   @db.VarChar(255)
+  avatarUrl              String?   @map("avatar_url") @db.VarChar(500)
+  phone                  String?   @db.VarChar(50)
+  phoneVerified          DateTime? @map("phone_verified") @db.Timestamptz
+  role                   UserRole  @default(CUSTOMER)
+  membershipTier         MembershipTier @default(PEARL) @map("membership_tier")
+  membershipExpiresAt    DateTime? @map("membership_expires_at") @db.Timestamptz
+  
+  // Preferences
+  preferredCurrency      String    @default("USD") @map("preferred_currency") @db.Char(3)
+  preferredLanguage      String    @default("en") @map("preferred_language") @db.VarChar(10)
+  timezone               String    @default("UTC") @db.VarChar(50)
+  
+  // AI & Personalization
+  styleProfileCompleted  Boolean   @default(false) @map("style_profile_completed")
+  aiConsent              Boolean   @default(true) @map("ai_consent")
+  personalizationLevel   Int       @default(5) @map("personalization_level")
+  
+  // Feature flags for A/B testing (NEW)
+  featureFlags           Json?     @map("feature_flags") @db.JsonB
+  
+  // Metadata
+  lastLoginAt            DateTime? @map("last_login_at") @db.Timestamptz
+  loginCount             Int       @default(0) @map("login_count")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz
+  
+  // Relations
+  oauthAccounts          OauthAccount[]
+  sessions               Session[]
+  styleProfile           StyleProfile?
+  aiInteractions         AiInteraction[]
+  carts                  Cart[]
+  wishlists              Wishlist[]
+  orders                 Order[]
+  reviews                Review[]
+  reviewInteractions     ReviewInteraction[]
+  addresses              Address[]
+  paymentMethods         PaymentMethod[]
+  notifications          Notification[]
+  membershipTransactions MembershipTransaction[]
+  loyaltyPoints          LoyaltyPoint[]
+  productViews           ProductView[]
+  searchLogs             SearchLog[]
+  couponUses             CouponUse[]
+  createdAuditLogs       AuditLog[] @relation("CreatedByUser")
+  settingsUpdates        SystemSetting[] @relation("UpdatedByUser")
+  inventoryTransactions  InventoryTransaction[] @relation("CreatedByUser")
+  orderStatusHistory     OrderStatusHistory[] @relation("CreatedByUser")
+  
+  // NEW V2.0 RELATIONS
+  virtualClosetItems     VirtualClosetItem[]
+  outfitRecommendations  OutfitRecommendation[]
+  sizeProfiles           SizeProfile[]
+  hostedLiveEvents       LiveShoppingEvent[] @relation("EventHost")
+  liveEventParticipations LiveEventParticipation[]
+
+  @@index([email], name: "idx_users_email", where: "deleted_at IS NULL")
+  @@index([membershipTier, membershipExpiresAt], name: "idx_users_membership", where: "deleted_at IS NULL")
+  @@index([createdAt(sort: Desc)], name: "idx_users_created_at")
+  @@map("users")
+}
+
+model OauthAccount {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  provider          String    @db.VarChar(50)
+  providerAccountId String    @map("provider_account_id") @db.VarChar(255)
+  accessToken       String?   @map("access_token") @db.Text
+  refreshToken      String?   @map("refresh_token") @db.Text
+  expiresAt         DateTime? @map("expires_at") @db.Timestamptz
+  tokenType         String?   @map("token_type") @db.VarChar(50)
+  scope             String?   @db.Text
+  idToken           String?   @map("id_token") @db.Text
+  sessionState      String?   @map("session_state") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
+model Session {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  sessionToken String    @unique @map("session_token") @db.VarChar(255)
+  ipAddress    String?   @map("ip_address") @db.Inet
+  userAgent    String?   @map("user_agent") @db.Text
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  carts        Cart[]
+  aiInteractions AiInteraction[]
+  productViews ProductView[]
+  searchLogs   SearchLog[]
+  
+  @@index([sessionToken], name: "idx_sessions_token")
+  @@index([expiresAt], name: "idx_sessions_expires")
+  @@map("sessions")
+}
+
+// =============================================
+// AI & PERSONALIZATION TABLES
+// =============================================
+
+model StyleProfile {
+  id                     String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                 String    @unique @map("user_id") @db.Uuid
+  
+  // Style preferences
+  stylePersonas          String[]  @map("style_personas")
+  favoriteColors         String[]  @map("favorite_colors")
+  avoidedColors          String[]  @map("avoided_colors")
+  preferredBrands        String[]  @map("preferred_brands")
+  avoidedMaterials       String[]  @map("avoided_materials")
+  
+  // Size information (encrypted)
+  measurements           Json?     @db.JsonB
+  typicalSizes           Json?     @map("typical_sizes") @db.JsonB
+  
+  // Budget preferences
+  minPricePreference     Decimal?  @map("min_price_preference") @db.Decimal(10,2)
+  maxPricePreference     Decimal?  @map("max_price_preference") @db.Decimal(10,2)
+  sweetSpotPrice         Decimal?  @map("sweet_spot_price") @db.Decimal(10,2)
+  
+  // AI embeddings for similarity matching (FIXED: proper vector type)
+  styleEmbedding         Unsupported("vector(1536)")?   @map("style_embedding")
+  colorEmbedding         Unsupported("vector(512)")?    @map("color_embedding")
+  brandEmbedding         Unsupported("vector(512)")?    @map("brand_embedding")
+  
+  // Behavioral data
+  prefersSustainable     Boolean   @default(false) @map("prefers_sustainable")
+  prefersExclusive       Boolean   @default(false) @map("prefers_exclusive")
+  earlyAdopterScore      Decimal   @default(0.5) @map("early_adopter_score") @db.Decimal(3,2)
+  luxuryAffinityScore    Decimal   @default(0.5) @map("luxury_affinity_score") @db.Decimal(3,2)
+  
+  // Style evolution tracking (NEW)
+  styleHistory           Json?     @map("style_history") @db.JsonB
+  seasonalPreferences    Json?     @map("seasonal_preferences") @db.JsonB
+  
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([styleEmbedding], name: "idx_style_embedding", type: Hnsw, opclass: vector_cosine_ops)
+  @@map("style_profiles")
+}
+
+model AiInteraction {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId            String?             @map("user_id") @db.Uuid
+  sessionId         String?             @map("session_id") @db.Uuid
+  interactionType   AiInteractionType   @map("interaction_type")
+  
+  // Interaction data
+  inputData         Json?               @map("input_data") @db.JsonB
+  outputData        Json?               @map("output_data") @db.JsonB
+  
+  // Performance metrics
+  responseTimeMs    Int?                @map("response_time_ms")
+  confidenceScore   Decimal?            @map("confidence_score") @db.Decimal(3,2)
+  userSatisfaction  Int?                @map("user_satisfaction")
+  
+  // Metadata
+  modelVersion      String?             @map("model_version") @db.VarChar(50)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user              User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session           Session?            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_ai_interactions_user")
+  @@index([interactionType, createdAt(sort: Desc)], name: "idx_ai_interactions_type")
+  @@map("ai_interactions")
+}
+
+// =============================================
+// PRODUCT CATALOG TABLES
+// =============================================
+
+model Category {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  parentId        String?   @map("parent_id") @db.Uuid
+  slug            String    @unique @db.VarChar(255)
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+  imageUrl        String?   @map("image_url") @db.VarChar(500)
+  
+  // SEO
+  metaTitle       String?   @map("meta_title") @db.VarChar(255)
+  metaDescription String?   @map("meta_description") @db.Text
+  
+  // Display
+  displayOrder    Int       @default(0) @map("display_order")
+  isFeatured      Boolean   @default(false) @map("is_featured")
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  parent          Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children        Category[] @relation("CategoryHierarchy")
+  products        Product[]
+  
+  // NEW V2.0 RELATIONS
+  translations    CategoryTranslation[]
+  
+  @@index([parentId], name: "idx_categories_parent", where: "parent_id IS NOT NULL")
+  @@index([slug], name: "idx_categories_slug", where: "is_active = true")
+  @@map("categories")
+}
+
+model Brand {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  slug                String    @unique @db.VarChar(255)
+  name                String    @db.VarChar(255)
+  logoUrl             String?   @map("logo_url") @db.VarChar(500)
+  description         String?   @db.Text
+  story               String?   @db.Text
+  
+  // Verification
+  isVerified          Boolean   @default(false) @map("is_verified")
+  verifiedAt          DateTime? @map("verified_at") @db.Timestamptz
+  
+  // Sustainability
+  sustainabilityScore Int?      @map("sustainability_score")
+  certifications      String[]
+  
+  // Contact
+  websiteUrl          String?   @map("website_url") @db.VarChar(500)
+  instagramHandle     String?   @map("instagram_handle") @db.VarChar(100)
+  
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  products            Product[]
+  
+  // NEW V2.0 RELATIONS
+  translations        BrandTranslation[]
+  
+  @@map("brands")
+}
+
+model Product {
+  id                String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sku               String        @unique @db.VarChar(100)
+  slug              String        @unique @db.VarChar(255)
+  name              String        @db.VarChar(255)
+  description       String?       @db.Text
+  story             String?       @db.Text
+  
+  // Categorization
+  categoryId        String        @map("category_id") @db.Uuid
+  brandId           String?       @map("brand_id") @db.Uuid
+  
+  // Pricing
+  price             Decimal       @db.Decimal(10,2)
+  compareAtPrice    Decimal?      @map("compare_at_price") @db.Decimal(10,2)
+  cost              Decimal?      @db.Decimal(10,2)
+  currency          String        @default("USD") @db.Char(3)
+  
+  // Status
+  status            ProductStatus @default(DRAFT)
+  publishedAt       DateTime?     @map("published_at") @db.Timestamptz
+  featuredAt        DateTime?     @map("featured_at") @db.Timestamptz
+  
+  // AI features (FIXED: proper vector type)
+  aiDescription     String?       @map("ai_description") @db.Text
+  productEmbedding  Unsupported("vector(1536)")?  @map("product_embedding")
+  colorAnalysis     Json?         @map("color_analysis") @db.JsonB
+  styleTags         String[]      @map("style_tags")
+  
+  // 3D/AR features (ADDED)
+  model3dUrl        String?       @map("model_3d_url") @db.VarChar(500)
+  arEnabled         Boolean       @default(false) @map("ar_enabled")
+  virtualTryOnEnabled Boolean     @default(false) @map("virtual_try_on_enabled")
+  
+  // SEO
+  metaTitle         String?       @map("meta_title") @db.VarChar(255)
+  metaDescription   String?       @map("meta_description") @db.Text
+  
+  // Sustainability
+  materials         Json?         @db.JsonB
+  carbonFootprint   Decimal?      @map("carbon_footprint") @db.Decimal(10,2)
+  recyclable        Boolean       @default(false)
+  
+  // Popularity metrics (ADDED)
+  viewCount         Int           @default(0) @map("view_count")
+  purchaseCount     Int           @default(0) @map("purchase_count")
+  wishlistCount     Int           @default(0) @map("wishlist_count")
+  
+  // Feature flags (ADDED)
+  isFeatured        Boolean       @default(false) @map("is_featured")
+  isExclusive       Boolean       @default(false) @map("is_exclusive")
+  isLimitedEdition  Boolean       @default(false) @map("is_limited_edition")
+  
+  // Launch/pre-order features (ADDED)
+  launchDate        DateTime?     @map("launch_date") @db.Timestamptz
+  preOrderEnabled   Boolean       @default(false) @map("pre_order_enabled")
+  preOrderEndDate   DateTime?     @map("pre_order_end_date") @db.Timestamptz
+  
+  // Metadata
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt         DateTime?     @map("deleted_at") @db.Timestamptz
+  
+  // Relations
+  category          Category      @relation(fields: [categoryId], references: [id])
+  brand             Brand?        @relation(fields: [brandId], references: [id])
+  variants          ProductVariant[]
+  media             ProductMedia[]
+  collections       CollectionProduct[]
+  cartItems         CartItem[]
+  wishlistItems     WishlistItem[]
+  orderItems        OrderItem[]
+  reviews           Review[]
+  productViews      ProductView[]
+  searchLogs        SearchLog[]
+  
+  // NEW V2.0 RELATIONS
+  translations      ProductTranslation[]
+  virtualClosetItems VirtualClosetItem[]
+  outfitRecommendations OutfitRecommendation[] @relation("BaseProduct")
+  outfitRecommendationItems OutfitRecommendationItem[]
+  liveEventProducts LiveEventProduct[]
+  
+  @@index([status, publishedAt(sort: Desc)], name: "idx_products_status", where: "deleted_at IS NULL")
+  @@index([categoryId], name: "idx_products_category", where: "deleted_at IS NULL")
+  @@index([brandId], name: "idx_products_brand", where: "deleted_at IS NULL")
+  @@index([price], name: "idx_products_price", where: "status = 'ACTIVE' AND deleted_at IS NULL")
+  @@index([sku], name: "idx_products_sku", where: "deleted_at IS NULL")
+  @@index([slug], name: "idx_products_slug", where: "deleted_at IS NULL")
+  @@index([productEmbedding], name: "idx_product_embedding", type: Hnsw, opclass: vector_cosine_ops)
+  @@index([materials], name: "idx_products_materials", type: Gin)
+  @@index([colorAnalysis], name: "idx_products_color_analysis", type: Gin)
+  @@map("products")
+}
+
+model ProductVariant {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  sku                  String    @unique @db.VarChar(100)
+  
+  // Variant attributes
+  size                 String?   @db.VarChar(50)
+  color                String?   @db.VarChar(100)
+  material             String?   @db.VarChar(100)
+  
+  // Pricing (can override product price)
+  price                Decimal?  @db.Decimal(10,2)
+  compareAtPrice       Decimal?  @map("compare_at_price") @db.Decimal(10,2)
+  
+  // Inventory
+  inventoryQuantity    Int       @default(0) @map("inventory_quantity")
+  inventoryReserved    Int       @default(0) @map("inventory_reserved")
+  lowStockThreshold    Int       @default(5) @map("low_stock_threshold")
+  
+  // Weight and dimensions for shipping
+  weightValue          Decimal?  @map("weight_value") @db.Decimal(10,3)
+  weightUnit           String    @default("kg") @map("weight_unit") @db.VarChar(10)
+  dimensions           Json?     @db.JsonB
+  
+  // Status
+  isAvailable          Boolean   @default(true) @map("is_available")
+  availableAt          DateTime? @map("available_at") @db.Timestamptz
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  product              Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  media                ProductMedia[]
+  cartItems            CartItem[]
+  wishlistItems        WishlistItem[]
+  orderItems           OrderItem[]
+  inventoryTransactions InventoryTransaction[]
+  
+  // NEW V2.0 RELATIONS
+  virtualClosetItems   VirtualClosetItem[]
+  sizeRecommendations  SizeRecommendation[]
+  
+  @@index([productId], name: "idx_variants_product")
+  @@index([inventoryQuantity], name: "idx_variants_inventory", where: "is_available = true")
+  @@map("product_variants")
+}
+
+model ProductMedia {
+  id             String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId      String         @map("product_id") @db.Uuid
+  variantId      String?        @map("variant_id") @db.Uuid
+  
+  // Media details
+  mediaType      String         @map("media_type") @db.VarChar(20)
+  url            String         @db.VarChar(500)
+  thumbnailUrl   String?        @map("thumbnail_url") @db.VarChar(500)
+  
+  // Image specific
+  altText        String?        @map("alt_text") @db.VarChar(255)
+  width          Int?
+  height         Int?
+  
+  // Video specific
+  durationSeconds Int?          @map("duration_seconds")
+  
+  // 3D/AR specific
+  modelFormat    String?        @map("model_format") @db.VarChar(20)
+  fileSizeBytes  BigInt?        @map("file_size_bytes")
+  
+  // 360° image support (ADDED)
+  is360Image     Boolean        @default(false) @map("is_360_image")
+  sequenceIndex  Int?           @map("sequence_index")
+  
+  // Organization
+  displayOrder   Int            @default(0) @map("display_order")
+  isPrimary      Boolean        @default(false) @map("is_primary")
+  
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  
+  @@index([productId, displayOrder], name: "idx_media_product")
+  @@index([variantId], name: "idx_media_variant", where: "variant_id IS NOT NULL")
+  @@map("product_media")
+}
+
+model Collection {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  slug            String    @unique @db.VarChar(255)
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+  
+  // Visual design
+  heroImageUrl    String?   @map("hero_image_url") @db.VarChar(500)
+  heroVideoUrl    String?   @map("hero_video_url") @db.VarChar(500)
+  colorTheme      Json?     @map("color_theme") @db.JsonB
+  
+  // Collection rules
+  isManual        Boolean   @default(true) @map("is_manual")
+  rules           Json?     @db.JsonB
+  
+  // Display
+  isActive        Boolean   @default(true) @map("is_active")
+  displayOrder    Int       @default(0) @map("display_order")
+  featuredUntil   DateTime? @map("featured_until") @db.Timestamptz
+  
+  // SEO
+  metaTitle       String?   @map("meta_title") @db.VarChar(255)
+  metaDescription String?   @map("meta_description") @db.Text
+  
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  products        CollectionProduct[]
+  
+  // NEW V2.0 RELATIONS
+  translations    CollectionTranslation[]
+  
+  @@map("collections")
+}
+
+model CollectionProduct {
+  collectionId String    @map("collection_id") @db.Uuid
+  productId    String    @map("product_id") @db.Uuid
+  displayOrder Int       @default(0) @map("display_order")
+  addedAt      DateTime  @default(now()) @map("added_at") @db.Timestamptz
+  
+  // Relations
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@id([collectionId, productId])
+  @@index([collectionId, displayOrder], name: "idx_collection_products")
+  @@map("collection_products")
+}
+
+// =============================================
+// SHOPPING CART & WISHLIST TABLES
+// =============================================
+
+model Cart {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId          String?   @map("user_id") @db.Uuid
+  sessionId       String?   @map("session_id") @db.Uuid
+  
+  // Cart state
+  isAbandoned     Boolean   @default(false) @map("is_abandoned")
+  abandonedAt     DateTime? @map("abandoned_at") @db.Timestamptz
+  reminderSentAt  DateTime? @map("reminder_sent_at") @db.Timestamptz
+  
+  // Pricing snapshot
+  currency        String    @default("USD") @db.Char(3)
+  subtotal        Decimal   @default(0) @db.Decimal(10,2)
+  taxAmount       Decimal   @default(0) @map("tax_amount") @db.Decimal(10,2)
+  shippingAmount  Decimal   @default(0) @map("shipping_amount") @db.Decimal(10,2)
+  discountAmount  Decimal   @default(0) @map("discount_amount") @db.Decimal(10,2)
+  total           Decimal   @default(0) @db.Decimal(10,2)
+  
+  // Applied codes
+  couponCode      String?   @map("coupon_code") @db.VarChar(50)
+  giftCardCodes   String[]  @map("gift_card_codes")
+  
+  expiresAt       DateTime  @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '30 days')")) @map("expires_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session         Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items           CartItem[]
+  
+  @@index([userId], name: "idx_carts_user", where: "user_id IS NOT NULL")
+  @@index([sessionId], name: "idx_carts_session", where: "session_id IS NOT NULL")
+  @@index([isAbandoned, abandonedAt], name: "idx_carts_abandoned", where: "is_abandoned = true")
+  @@map("carts")
+}
+
+model CartItem {
+  id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  cartId               String         @map("cart_id") @db.Uuid
+  productId            String         @map("product_id") @db.Uuid
+  variantId            String         @map("variant_id") @db.Uuid
+  
+  quantity             Int            @default(1)
+  
+  // Price at time of adding (for price protection)
+  priceAtTime          Decimal        @map("price_at_time") @db.Decimal(10,2)
+  
+  // Personalization
+  personalization      Json?          @db.JsonB
+  
+  // AI recommendations
+  addedFrom            String?        @map("added_from") @db.VarChar(50)
+  recommendationScore  Decimal?       @map("recommendation_score") @db.Decimal(3,2)
+  
+  addedAt              DateTime       @default(now()) @map("added_at") @db.Timestamptz
+  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  cart                 Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product              Product        @relation(fields: [productId], references: [id])
+  variant              ProductVariant @relation(fields: [variantId], references: [id])
+  
+  @@index([cartId], name: "idx_cart_items_cart")
+  @@unique([cartId, variantId], name: "idx_cart_items_unique", where: "personalization IS NULL")
+  @@map("cart_items")
+}
+
+model Wishlist {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String    @default("My Wishlist") @db.VarChar(255)
+  isPublic    Boolean   @default(false) @map("is_public")
+  shareToken  String?   @unique @map("share_token") @db.VarChar(100)
+  
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       WishlistItem[]
+  
+  @@index([userId], name: "idx_wishlists_user")
+  @@index([shareToken], name: "idx_wishlists_share", where: "share_token IS NOT NULL")
+  @@map("wishlists")
+}
+
+model WishlistItem {
+  id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  wishlistId           String         @map("wishlist_id") @db.Uuid
+  productId            String         @map("product_id") @db.Uuid
+  variantId            String?        @map("variant_id") @db.Uuid
+  
+  // Notifications
+  notifyPriceDrop      Boolean        @default(true) @map("notify_price_drop")
+  notifyBackInStock    Boolean        @default(true) @map("notify_back_in_stock")
+  
+  // Tracking
+  priceWhenAdded       Decimal?       @map("price_when_added") @db.Decimal(10,2)
+  notes                String?        @db.Text
+  
+  addedAt              DateTime       @default(now()) @map("added_at") @db.Timestamptz
+  
+  // Relations
+  wishlist             Wishlist       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product              Product        @relation(fields: [productId], references: [id])
+  variant              ProductVariant? @relation(fields: [variantId], references: [id])
+  
+  @@unique([wishlistId, productId, variantId])
+  @@index([wishlistId], name: "idx_wishlist_items")
+  @@map("wishlist_items")
+}
+
+// =============================================
+// ORDER MANAGEMENT TABLES
+// =============================================
+
+model Order {
+  id                     String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  orderNumber            String        @unique @map("order_number") @db.VarChar(20)
+  userId                 String        @map("user_id") @db.Uuid
+  
+  // Status
+  status                 OrderStatus   @default(PENDING)
+  paymentStatus          PaymentStatus @default(PENDING) @map("payment_status")
+  
+  // Customer info snapshot
+  customerEmail          String        @map("customer_email") @db.VarChar(255)
+  customerPhone          String?       @map("customer_phone") @db.VarChar(50)
+  
+  // Pricing
+  currency               String        @default("USD") @db.Char(3)
+  subtotal               Decimal       @db.Decimal(10,2)
+  taxAmount              Decimal       @default(0) @map("tax_amount") @db.Decimal(10,2)
+  shippingAmount         Decimal       @default(0) @map("shipping_amount") @db.Decimal(10,2)
+  discountAmount         Decimal       @default(0) @map("discount_amount") @db.Decimal(10,2)
+  total                  Decimal       @db.Decimal(10,2)
+  
+  // Shipping
+  shippingMethod         String?       @map("shipping_method") @db.VarChar(100)
+  shippingCarrier        String?       @map("shipping_carrier") @db.VarChar(100)
+  trackingNumber         String?       @map("tracking_number") @db.VarChar(255)
+  estimatedDelivery      DateTime?     @map("estimated_delivery") @db.Date
+  deliveredAt            DateTime?     @map("delivered_at") @db.Timestamptz
+  
+  // AI insights
+  fraudScore             Decimal?      @map("fraud_score") @db.Decimal(3,2)
+  recommendationInfluence Decimal?     @map("recommendation_influence") @db.Decimal(3,2)
+  
+  // Metadata
+  notes                  String?       @db.Text
+  adminNotes             String?       @map("admin_notes") @db.Text
+  tags                   String[]
+  
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  cancelledAt            DateTime?     @map("cancelled_at") @db.Timestamptz
+  
+  // Relations
+  user                   User          @relation(fields: [userId], references: [id])
+  items                  OrderItem[]
+  statusHistory          OrderStatusHistory[]
+  paymentTransactions    PaymentTransaction[]
+  couponUses             CouponUse[]
+  loyaltyPoints          LoyaltyPoint[]
+  notifications          Notification[]
+  
+  // NEW V2.0 RELATIONS
+  virtualClosetItems     VirtualClosetItem[]
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_orders_user")
+  @@index([status, createdAt(sort: Desc)], name: "idx_orders_status")
+  @@index([orderNumber], name: "idx_orders_number")
+  @@index([createdAt(sort: Desc)], name: "idx_orders_created")
+  @@map("orders")
+}
+
+model OrderItem {
+  id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  orderId              String         @map("order_id") @db.Uuid
+  productId            String         @map("product_id") @db.Uuid
+  variantId            String         @map("variant_id") @db.Uuid
+  
+  // Item details at time of order
+  productName          String         @map("product_name") @db.VarChar(255)
+  variantTitle         String?        @map("variant_title") @db.VarChar(255)
+  sku                  String         @db.VarChar(100)
+  
+  // Quantities and pricing
+  quantity             Int
+  unitPrice            Decimal        @map("unit_price") @db.Decimal(10,2)
+  totalPrice           Decimal        @map("total_price") @db.Decimal(10,2)
+  
+  // Personalization
+  personalization      Json?          @db.JsonB
+  
+  // Fulfillment
+  fulfilledQuantity    Int            @default(0) @map("fulfilled_quantity")
+  returnedQuantity     Int            @default(0) @map("returned_quantity")
+  refundedQuantity     Int            @default(0) @map("refunded_quantity")
+  
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  order                Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product              Product        @relation(fields: [productId], references: [id])
+  variant              ProductVariant @relation(fields: [variantId], references: [id])
+  reviews              Review[]
+  inventoryTransactions InventoryTransaction[]
+  
+  @@index([orderId], name: "idx_order_items_order")
+  @@index([productId], name: "idx_order_items_product")
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  orderId   String      @map("order_id") @db.Uuid
+  status    OrderStatus
+  notes     String?     @db.Text
+  createdBy String?     @map("created_by") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  creator   User?       @relation("CreatedByUser", fields: [createdBy], references: [id])
+  
+  @@index([orderId, createdAt(sort: Desc)], name: "idx_order_status_history")
+  @@map("order_status_history")
+}
+
+// =============================================
+// PAYMENT & TRANSACTION TABLES
+// =============================================
+
+model PaymentMethod {
+  id                       String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                   String                 @map("user_id") @db.Uuid
+  
+  // Payment details
+  type                     String                 @db.VarChar(50)
+  provider                 String                 @db.VarChar(50)
+  
+  // Card specific (tokenized)
+  cardBrand                String?                @map("card_brand") @db.VarChar(50)
+  cardLast4                String?                @map("card_last4") @db.VarChar(4)
+  cardExpMonth             Int?                   @map("card_exp_month")
+  cardExpYear              Int?                   @map("card_exp_year")
+  
+  // Billing address
+  billingAddressId         String?                @map("billing_address_id") @db.Uuid
+  
+  // Security audit (ADDED)
+  lastUsedAt               DateTime?              @map("last_used_at") @db.Timestamptz
+  lastUsedIp               String?                @map("last_used_ip") @db.Inet
+  failedAttempts           Int                    @default(0) @map("failed_attempts")
+  lockedUntil              DateTime?              @map("locked_until") @db.Timestamptz
+  
+  // Metadata
+  isDefault                Boolean                @default(false) @map("is_default")
+  providerCustomerId       String?                @map("provider_customer_id") @db.VarChar(255)
+  providerPaymentMethodId  String?                @map("provider_payment_method_id") @db.VarChar(255)
+  
+  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user                     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingAddress           Address?               @relation(fields: [billingAddressId], references: [id])
+  paymentTransactions      PaymentTransaction[]
+  
+  @@index([userId], name: "idx_payment_methods_user")
+  @@map("payment_methods")
+}
+
+model PaymentTransaction {
+  id                       String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  orderId                  String           @map("order_id") @db.Uuid
+  paymentMethodId          String?          @map("payment_method_id") @db.Uuid
+  
+  // Transaction details
+  type                     String           @db.VarChar(50)
+  status                   PaymentStatus
+  
+  // Amounts
+  amount                   Decimal          @db.Decimal(10,2)
+  currency                 String           @default("USD") @db.Char(3)
+  
+  // Provider details
+  provider                 String           @db.VarChar(50)
+  providerTransactionId    String?          @unique @map("provider_transaction_id") @db.VarChar(255)
+  providerResponse         Json?            @map("provider_response") @db.JsonB
+  
+  // Metadata
+  failureReason            String?          @map("failure_reason") @db.Text
+  processedAt              DateTime?        @map("processed_at") @db.Timestamptz
+  createdAt                DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  order                    Order            @relation(fields: [orderId], references: [id])
+  paymentMethod            PaymentMethod?   @relation(fields: [paymentMethodId], references: [id])
+  membershipTransactions   MembershipTransaction[]
+  
+  @@index([orderId], name: "idx_payment_transactions_order")
+  @@index([providerTransactionId], name: "idx_payment_transactions_provider")
+  @@map("payment_transactions")
+}
+
+// =============================================
+// USER INTERACTION TABLES
+// =============================================
+
+model Review {
+  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId         String              @map("product_id") @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  orderItemId       String?             @map("order_item_id") @db.Uuid
+  
+  // Review content
+  rating            Int
+  title             String?             @db.VarChar(255)
+  content           String?             @db.Text
+  
+  // Review metadata
+  isVerifiedPurchase Boolean            @default(false) @map("is_verified_purchase")
+  helpfulCount      Int                 @default(0) @map("helpful_count")
+  notHelpfulCount   Int                 @default(0) @map("not_helpful_count")
+  
+  // AI analysis
+  sentimentScore    Decimal?            @map("sentiment_score") @db.Decimal(3,2)
+  qualityScore      Decimal?            @map("quality_score") @db.Decimal(3,2)
+  
+  // Status
+  status            ReviewStatus        @default(PENDING)
+  
+  // Media
+  mediaUrls         String[]            @map("media_urls")
+  
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  product           Product             @relation(fields: [productId], references: [id])
+  user              User                @relation(fields: [userId], references: [id])
+  orderItem         OrderItem?          @relation(fields: [orderItemId], references: [id])
+  interactions      ReviewInteraction[]
+  
+  @@unique([productId, userId])
+  @@index([productId, status, rating(sort: Desc)], name: "idx_reviews_product")
+  @@index([userId], name: "idx_reviews_user")
+  @@map("reviews")
+}
+
+model ReviewInteraction {
+  userId    String   @map("user_id") @db.Uuid
+  reviewId  String   @map("review_id") @db.Uuid
+  isHelpful Boolean  @map("is_helpful")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  
+  @@id([userId, reviewId])
+  @@map("review_interactions")
+}
+
+model Address {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  
+  // Address details
+  type           String    @default("shipping") @db.VarChar(50)
+  isDefault      Boolean   @default(false) @map("is_default")
+  
+  // Contact
+  firstName      String    @map("first_name") @db.VarChar(100)
+  lastName       String    @map("last_name") @db.VarChar(100)
+  company        String?   @db.VarChar(100)
+  phone          String?   @db.VarChar(50)
+  
+  // Address
+  addressLine1   String    @map("address_line1") @db.VarChar(255)
+  addressLine2   String?   @map("address_line2") @db.VarChar(255)
+  city           String    @db.VarChar(100)
+  stateProvince  String?   @map("state_province") @db.VarChar(100)
+  postalCode     String    @map("postal_code") @db.VarChar(20)
+  countryCode    String    @map("country_code") @db.Char(2)
+  
+  // Geolocation (for distance calculations)
+  coordinates    Unsupported("geography(Point, 4326)")?
+  
+  // Validation
+  isValidated    Boolean   @default(false) @map("is_validated")
+  validatedAt    DateTime? @map("validated_at") @db.Timestamptz
+  
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethods PaymentMethod[]
+  
+  @@index([userId], name: "idx_addresses_user")
+  @@map("addresses")
+}
+
+// =============================================
+// ANALYTICS & TRACKING TABLES
+// =============================================
+
+model ProductView {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  userId               String?   @map("user_id") @db.Uuid
+  sessionId            String?   @map("session_id") @db.Uuid
+  
+  // View context
+  source               String?   @db.VarChar(50)
+  searchQuery          String?   @map("search_query") @db.Text
+  recommendationId     String?   @map("recommendation_id") @db.Uuid
+  
+  // Engagement metrics
+  viewDurationSeconds  Int?      @map("view_duration_seconds")
+  interactions         Json?     @db.JsonB
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  product              Product   @relation(fields: [productId], references: [id])
+  user                 User?     @relation(fields: [userId], references: [id])
+  session              Session?  @relation(fields: [sessionId], references: [id])
+  
+  @@index([productId, createdAt(sort: Desc)], name: "idx_product_views_product")
+  @@index([userId, createdAt(sort: Desc)], name: "idx_product_views_user", where: "user_id IS NOT NULL")
+  @@index([createdAt(sort: Desc)], name: "idx_product_views_date")
+  @@map("product_views")
+}
+
+model SearchLog {
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId            String?   @map("user_id") @db.Uuid
+  sessionId         String?   @map("session_id") @db.Uuid
+  
+  query             String    @db.Text
+  filters           Json?     @db.JsonB
+  resultsCount      Int?      @map("results_count")
+  clickedPosition   Int?      @map("clicked_position")
+  clickedProductId  String?   @map("clicked_product_id") @db.Uuid
+  
+  // Search performance
+  responseTimeMs    Int?      @map("response_time_ms")
+  searchMethod      String?   @map("search_method") @db.VarChar(50)
+  
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user              User?     @relation(fields: [userId], references: [id])
+  session           Session?  @relation(fields: [sessionId], references: [id])
+  clickedProduct    Product?  @relation(fields: [clickedProductId], references: [id]) // RESTORED
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_search_logs_user", where: "user_id IS NOT NULL")
+  @@map("search_logs")
+}
+
+// =============================================
+// MARKETING & COMMUNICATIONS TABLES
+// =============================================
+
+model EmailCampaign {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name               String    @db.VarChar(255)
+  subject            String    @db.VarChar(255)
+  
+  // Campaign type
+  type               String    @db.VarChar(50)
+  
+  // Content
+  htmlContent        String?   @map("html_content") @db.Text
+  textContent        String?   @map("text_content") @db.Text
+  
+  // Targeting
+  targetSegment      Json?     @map("target_segment") @db.JsonB
+  
+  // Status
+  status             String    @default("DRAFT") @db.VarChar(50)
+  scheduledAt        DateTime? @map("scheduled_at") @db.Timestamptz
+  sentAt             DateTime? @map("sent_at") @db.Timestamptz
+  
+  // Metrics
+  sentCount          Int       @default(0) @map("sent_count")
+  openCount          Int       @default(0) @map("open_count")
+  clickCount         Int       @default(0) @map("click_count")
+  conversionCount    Int       @default(0) @map("conversion_count")
+  revenueGenerated   Decimal   @default(0) @map("revenue_generated") @db.Decimal(10,2)
+  
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  @@index([targetSegment], name: "idx_campaigns_segment", type: Gin)
+  @@map("email_campaigns")
+}
+
+model Coupon {
+  id                     String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  code                   String           @unique @db.VarChar(50)
+  description            String?          @db.Text
+  
+  // Discount details
+  discountType           String           @map("discount_type") @db.VarChar(20)
+  discountValue          Decimal          @map("discount_value") @db.Decimal(10,2)
+  
+  // Conditions
+  minimumAmount          Decimal?         @map("minimum_amount") @db.Decimal(10,2)
+  applicableProducts     String[]         @map("applicable_products") @db.Uuid
+  applicableCategories   String[]         @map("applicable_categories") @db.Uuid
+  applicableBrands       String[]         @map("applicable_brands") @db.Uuid
+  
+  // Usage limits
+  usageLimit             Int?             @map("usage_limit")
+  usageCount             Int              @default(0) @map("usage_count")
+  usageLimitPerUser      Int?             @map("usage_limit_per_user")
+  
+  // Validity
+  validFrom              DateTime         @default(now()) @map("valid_from") @db.Timestamptz
+  validUntil             DateTime?        @map("valid_until") @db.Timestamptz
+  
+  // Restrictions
+  firstPurchaseOnly      Boolean          @default(false) @map("first_purchase_only")
+  membershipTiers        MembershipTier[] @map("membership_tiers")
+  
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  couponUses             CouponUse[]
+  
+  @@index([code], name: "idx_coupons_code", where: "valid_until > CURRENT_TIMESTAMP OR valid_until IS NULL")
+  @@map("coupons")
+}
+
+model CouponUse {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  couponId       String    @map("coupon_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  orderId        String    @map("order_id") @db.Uuid
+  discountAmount Decimal   @map("discount_amount") @db.Decimal(10,2)
+  usedAt         DateTime  @default(now()) @map("used_at") @db.Timestamptz
+  
+  // Relations
+  coupon         Coupon    @relation(fields: [couponId], references: [id])
+  user           User      @relation(fields: [userId], references: [id])
+  order          Order     @relation(fields: [orderId], references: [id])
+  
+  @@unique([couponId, orderId])
+  @@index([userId], name: "idx_coupon_uses_user")
+  @@map("coupon_uses")
+}
+
+// =============================================
+// NOTIFICATIONS & MESSAGING TABLES
+// =============================================
+
+model Notification {
+  id        String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  
+  type      NotificationType
+  title     String           @db.VarChar(255)
+  message   String           @db.Text
+  
+  // Related entities
+  orderId   String?          @map("order_id") @db.Uuid
+  productId String?          @map("product_id") @db.Uuid
+  
+  // Delivery
+  channels  String[]         @default(["in_app"])
+  
+  // Status
+  isRead    Boolean          @default(false) @map("is_read")
+  readAt    DateTime?        @map("read_at") @db.Timestamptz
+  
+  // Actions
+  actionUrl String?          @map("action_url") @db.VarChar(500)
+  actionLabel String?        @map("action_label") @db.VarChar(100)
+  
+  expiresAt DateTime?        @map("expires_at") @db.Timestamptz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order     Order?           @relation(fields: [orderId], references: [id])
+  product   Product?         @relation(fields: [productId], references: [id])
+  
+  @@index([userId, isRead, createdAt(sort: Desc)], name: "idx_notifications_user")
+  @@index([expiresAt], name: "idx_notifications_expires", where: "expires_at IS NOT NULL")
+  @@map("notifications")
+}
+
+// =============================================
+// MEMBERSHIP & LOYALTY TABLES
+// =============================================
+
+model MembershipTransaction {
+  id                     String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId                 String                @map("user_id") @db.Uuid
+  
+  // Transaction details
+  type                   String                @db.VarChar(50)
+  fromTier               MembershipTier?       @map("from_tier")
+  toTier                 MembershipTier        @map("to_tier")
+  
+  // Billing
+  amount                 Decimal?              @db.Decimal(10,2)
+  currency               String                @default("USD") @db.Char(3)
+  paymentTransactionId   String?               @map("payment_transaction_id") @db.Uuid
+  
+  // Validity
+  startsAt               DateTime              @map("starts_at") @db.Timestamptz
+  endsAt                 DateTime?             @map("ends_at") @db.Timestamptz
+  
+  // Metadata
+  reason                 String?               @db.Text
+  
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user                   User                  @relation(fields: [userId], references: [id])
+  paymentTransaction     PaymentTransaction?   @relation(fields: [paymentTransactionId], references: [id])
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_membership_transactions_user")
+  @@map("membership_transactions")
+}
+
+model LoyaltyPoint {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  
+  // Transaction details
+  type         String    @db.VarChar(50)
+  points       Int
+  balanceAfter Int       @map("balance_after")
+  
+  // Source
+  source       String?   @db.VarChar(50)
+  orderId      String?   @map("order_id") @db.Uuid
+  
+  // Expiration
+  expiresAt    DateTime? @map("expires_at") @db.Timestamptz
+  
+  // Metadata
+  description  String?   @db.Text
+  
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user         User      @relation(fields: [userId], references: [id])
+  order        Order?    @relation(fields: [orderId], references: [id])
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_loyalty_points_user")
+  @@index([expiresAt], name: "idx_loyalty_points_expires", where: "expires_at IS NOT NULL AND points > 0")
+  @@map("loyalty_points")
+}
+
+// =============================================
+// INVENTORY MANAGEMENT TABLES
+// =============================================
+
+model InventoryTransaction {
+  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  variantId    String         @map("variant_id") @db.Uuid
+  
+  // Transaction details
+  type         String         @db.VarChar(50)
+  quantity     Int
+  balanceAfter Int            @map("balance_after")
+  
+  // Reference
+  orderItemId  String?        @map("order_item_id") @db.Uuid
+  
+  // Metadata
+  reason       String?        @db.Text
+  createdBy    String?        @map("created_by") @db.Uuid
+  
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  variant      ProductVariant @relation(fields: [variantId], references: [id])
+  orderItem    OrderItem?     @relation(fields: [orderItemId], references: [id])
+  creator      User?          @relation("CreatedByUser", fields: [createdBy], references: [id])
+  
+  @@index([variantId, createdAt(sort: Desc)], name: "idx_inventory_transactions_variant")
+  @@map("inventory_transactions")
+}
+
+// =============================================
+// ADMIN & SYSTEM TABLES
+// =============================================
+
+model AuditLog {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String?   @map("user_id") @db.Uuid
+  
+  // Action details
+  action     String    @db.VarChar(100)
+  entityType String    @map("entity_type") @db.VarChar(50)
+  entityId   String    @map("entity_id") @db.Uuid
+  
+  // Changes
+  oldValues  Json?     @map("old_values") @db.JsonB
+  newValues  Json?     @map("new_values") @db.JsonB
+  
+  // Context
+  ipAddress  String?   @map("ip_address") @db.Inet
+  userAgent  String?   @map("user_agent") @db.Text
+  
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  user       User?     @relation("CreatedByUser", fields: [userId], references: [id])
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_audit_logs_user")
+  @@index([entityType, entityId, createdAt(sort: Desc)], name: "idx_audit_logs_entity")
+  @@index([createdAt(sort: Desc)], name: "idx_audit_logs_date")
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  key         String    @id @db.VarChar(100)
+  value       Json      @db.JsonB
+  description String?   @db.Text
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  updater     User?     @relation("UpdatedByUser", fields: [updatedBy], references: [id])
+  
+  @@map("system_settings")
+}
+
+// =============================================
+// NEW V2.0 FEATURES BELOW
+// =============================================
+
+// =============================================
+// VIRTUAL CLOSET FEATURE (NEW)
+// =============================================
+
+model VirtualClosetItem {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  variantId            String?   @map("variant_id") @db.Uuid
+  
+  // Ownership details
+  purchaseDate         DateTime? @map("purchase_date") @db.Timestamptz
+  orderId              String?   @map("order_id") @db.Uuid
+  acquisitionType      String    @default("purchased") @map("acquisition_type") @db.VarChar(50)
+  
+  // Usage tracking
+  wearCount            Int       @default(0) @map("wear_count")
+  lastWornDate         DateTime? @map("last_worn_date") @db.Timestamptz
+  occasions            String[]
+  
+  // Organization
+  customCategories     String[]  @map("custom_categories")
+  seasons              String[]
+  colors               String[]
+  
+  // AI insights
+  costPerWear          Decimal?  @map("cost_per_wear") @db.Decimal(10,2)
+  versatilityScore     Decimal?  @map("versatility_score") @db.Decimal(3,2)
+  compatibilityScores  Json?     @map("compatibility_scores") @db.JsonB
+  
+  // User notes
+  notes                String?   @db.Text
+  rating               Int?
+  
+  // Status
+  isActive             Boolean   @default(true) @map("is_active")
+  donatedAt            DateTime? @map("donated_at") @db.Timestamptz
+  soldAt               DateTime? @map("sold_at") @db.Timestamptz
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product              Product   @relation(fields: [productId], references: [id])
+  variant              ProductVariant? @relation(fields: [variantId], references: [id])
+  order                Order?    @relation(fields: [orderId], references: [id])
+  
+  @@index([userId, isActive], name: "idx_virtual_closet_user")
+  @@index([userId, lastWornDate], name: "idx_virtual_closet_worn")
+  @@map("virtual_closet_items")
+}
+
+// =============================================
+// AI OUTFIT RECOMMENDATIONS (NEW)
+// =============================================
+
+model OutfitRecommendation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  
+  // Outfit details
+  name                 String?   @db.VarChar(255)
+  baseProductId        String    @map("base_product_id") @db.Uuid
+  
+  // AI metrics
+  styleScore           Decimal   @map("style_score") @db.Decimal(3,2)
+  occasionTags         String[]  @map("occasion_tags")
+  seasonTags           String[]  @map("season_tags")
+  colorHarmonyScore    Decimal   @map("color_harmony_score") @db.Decimal(3,2)
+  
+  // User interaction
+  liked                Boolean?
+  saved                Boolean   @default(false)
+  purchased            Boolean   @default(false)
+  viewCount            Int       @default(0) @map("view_count")
+  shareCount           Int       @default(0) @map("share_count")
+  
+  // AI reasoning
+  aiReasoning          Json?     @map("ai_reasoning") @db.JsonB
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseProduct          Product   @relation("BaseProduct", fields: [baseProductId], references: [id])
+  items                OutfitRecommendationItem[]
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_outfit_recommendations_user")
+  @@index([styleScore(sort: Desc)], name: "idx_outfit_recommendations_score")
+  @@map("outfit_recommendations")
+}
+
+model OutfitRecommendationItem {
+  id                   String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  recommendationId     String                @map("recommendation_id") @db.Uuid
+  productId            String                @map("product_id") @db.Uuid
+  
+  // Item role in outfit
+  itemType             String                @db.VarChar(50)
+  isOptional           Boolean               @default(false) @map("is_optional")
+  alternativeRank      Int?                  @map("alternative_rank")
+  
+  // Matching score
+  matchScore           Decimal               @map("match_score") @db.Decimal(3,2)
+  
+  // Relations
+  recommendation       OutfitRecommendation  @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  product              Product               @relation(fields: [productId], references: [id])
+  
+  @@index([recommendationId], name: "idx_outfit_items_recommendation")
+  @@map("outfit_recommendation_items")
+}
+
+// =============================================
+// SIZE RECOMMENDATION SYSTEM (NEW)
+// =============================================
+
+model SizeProfile {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  
+  // Body measurements (encrypted)
+  measurements         Json      @db.JsonB
+  measurementUnit      String    @default("cm") @map("measurement_unit") @db.VarChar(10)
+  
+  // Fit preferences
+  preferredFit         String    @default("regular") @map("preferred_fit") @db.VarChar(50)
+  
+  // Brand-specific sizes
+  brandSizes           Json?     @map("brand_sizes") @db.JsonB
+  
+  // AI analysis
+  bodyType             String?   @map("body_type") @db.VarChar(50)
+  fitProfile           Json?     @map("fit_profile") @db.JsonB
+  
+  // Privacy
+  isPublic             Boolean   @default(false) @map("is_public")
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendations      SizeRecommendation[]
+  
+  @@unique([userId])
+  @@map("size_profiles")
+}
+
+model SizeRecommendation {
+  id                   String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sizeProfileId        String         @map("size_profile_id") @db.Uuid
+  variantId            String         @map("variant_id") @db.Uuid
+  
+  // Recommendation
+  recommendedSize      String         @map("recommended_size") @db.VarChar(50)
+  confidenceScore      Decimal        @map("confidence_score") @db.Decimal(3,2)
+  
+  // Fit details
+  fitNotes             Json?          @map("fit_notes") @db.JsonB
+  
+  // Feedback
+  userFeedback         String?        @map("user_feedback") @db.VarChar(50)
+  actualSizePurchased  String?        @map("actual_size_purchased") @db.VarChar(50)
+  
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  
+  // Relations
+  sizeProfile          SizeProfile    @relation(fields: [sizeProfileId], references: [id], onDelete: Cascade)
+  variant              ProductVariant @relation(fields: [variantId], references: [id])
+  
+  @@index([sizeProfileId, variantId], name: "idx_size_recommendations")
+  @@map("size_recommendations")
+}
+
+// =============================================
+// LIVE SHOPPING EVENTS (NEW)
+// =============================================
+
+model LiveShoppingEvent {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title                String    @db.VarChar(255)
+  description          String?   @db.Text
+  hostId               String    @map("host_id") @db.Uuid
+  
+  // Event timing
+  scheduledStart       DateTime  @map("scheduled_start") @db.Timestamptz
+  scheduledEnd         DateTime  @map("scheduled_end") @db.Timestamptz
+  actualStart          DateTime? @map("actual_start") @db.Timestamptz
+  actualEnd            DateTime? @map("actual_end") @db.Timestamptz
+  
+  // Event status
+  status               LiveEventStatus @default(SCHEDULED)
+  
+  // Streaming details
+  streamUrl            String?   @map("stream_url") @db.VarChar(500)
+  streamKey            String?   @map("stream_key") @db.VarChar(255)
+  recordingUrl         String?   @map("recording_url") @db.VarChar(500)
+  
+  // Visual assets
+  thumbnailUrl         String?   @map("thumbnail_url") @db.VarChar(500)
+  bannerUrl            String?   @map("banner_url") @db.VarChar(500)
+  
+  // Engagement features
+  chatEnabled          Boolean   @default(true) @map("chat_enabled")
+  maxViewers           Int?      @map("max_viewers")
+  
+  // Analytics
+  viewerCount          Int       @default(0) @map("viewer_count")
+  peakViewers          Int       @default(0) @map("peak_viewers")
+  uniqueViewers        Int       @default(0) @map("unique_viewers")
+  averageViewTime      Int?      @map("average_view_time")
+  
+  // Sales metrics
+  totalSales           Decimal   @default(0) @map("total_sales") @db.Decimal(10,2)
+  conversionRate       Decimal?  @map("conversion_rate") @db.Decimal(5,2)
+  
+  // Promo codes
+  exclusiveCode        String?   @map("exclusive_code") @db.VarChar(50)
+  discountPercentage   Int?      @map("discount_percentage")
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  host                 User      @relation("EventHost", fields: [hostId], references: [id])
+  products             LiveEventProduct[]
+  participants         LiveEventParticipation[]
+  
+  @@index([scheduledStart], name: "idx_live_events_schedule")
+  @@index([status], name: "idx_live_events_status")
+  @@map("live_shopping_events")
+}
+
+model LiveEventProduct {
+  eventId              String    @map("event_id") @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  
+  // Display details
+  displayOrder         Int       @default(0) @map("display_order")
+  featuredAt           DateTime? @map("featured_at") @db.Timestamptz
+  featuredDuration     Int?      @map("featured_duration")
+  
+  // Special pricing
+  eventPrice           Decimal?  @map("event_price") @db.Decimal(10,2)
+  
+  // Analytics
+  clickCount           Int       @default(0) @map("click_count")
+  purchaseCount        Int       @default(0) @map("purchase_count")
+  
+  // Relations
+  event                LiveShoppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product              Product   @relation(fields: [productId], references: [id])
+  
+  @@id([eventId, productId])
+  @@index([eventId, displayOrder], name: "idx_live_event_products")
+  @@map("live_event_products")
+}
+
+model LiveEventParticipation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventId              String    @map("event_id") @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  
+  // Participation details
+  joinedAt             DateTime  @default(now()) @map("joined_at") @db.Timestamptz
+  leftAt               DateTime? @map("left_at") @db.Timestamptz
+  watchTimeSeconds     Int       @default(0) @map("watch_time_seconds")
+  
+  // Engagement
+  chatMessageCount     Int       @default(0) @map("chat_message_count")
+  reactionCount        Int       @default(0) @map("reaction_count")
+  
+  // Purchase tracking
+  purchasedProducts    String[]  @map("purchased_products") @db.Uuid
+  totalSpent           Decimal   @default(0) @map("total_spent") @db.Decimal(10,2)
+  
+  // Relations
+  event                LiveShoppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id])
+  
+  @@unique([eventId, userId])
+  @@index([eventId], name: "idx_live_participations_event")
+  @@index([userId], name: "idx_live_participations_user")
+  @@map("live_event_participations")
+}
+
+// =============================================
+// INTERNATIONALIZATION (NEW) - FIXED DESIGN
+// =============================================
+
+// Each entity type gets its own translation table to avoid polymorphic relations
+
+model ProductTranslation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  languageCode         String    @map("language_code") @db.VarChar(10)
+  
+  // Translatable fields
+  name                 String?   @db.VarChar(255)
+  description          String?   @db.Text
+  story                String?   @db.Text
+  metaTitle            String?   @map("meta_title") @db.VarChar(255)
+  metaDescription      String?   @map("meta_description") @db.Text
+  
+  // Metadata
+  status               TranslationStatus @default(PENDING)
+  isAutoTranslated     Boolean   @default(false) @map("is_auto_translated")
+  translatedBy         String?   @map("translated_by") @db.Uuid
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  product              Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@unique([productId, languageCode])
+  @@index([languageCode], name: "idx_product_translations_language")
+  @@index([status], name: "idx_product_translations_status")
+  @@map("product_translations")
+}
+
+model CategoryTranslation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  categoryId           String    @map("category_id") @db.Uuid
+  languageCode         String    @map("language_code") @db.VarChar(10)
+  
+  // Translatable fields
+  name                 String?   @db.VarChar(255)
+  description          String?   @db.Text
+  metaTitle            String?   @map("meta_title") @db.VarChar(255)
+  metaDescription      String?   @map("meta_description") @db.Text
+  
+  // Metadata
+  status               TranslationStatus @default(PENDING)
+  isAutoTranslated     Boolean   @default(false) @map("is_auto_translated")
+  translatedBy         String?   @map("translated_by") @db.Uuid
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  category             Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@unique([categoryId, languageCode])
+  @@index([languageCode], name: "idx_category_translations_language")
+  @@map("category_translations")
+}
+
+model CollectionTranslation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  collectionId         String    @map("collection_id") @db.Uuid
+  languageCode         String    @map("language_code") @db.VarChar(10)
+  
+  // Translatable fields
+  name                 String?   @db.VarChar(255)
+  description          String?   @db.Text
+  metaTitle            String?   @map("meta_title") @db.VarChar(255)
+  metaDescription      String?   @map("meta_description") @db.Text
+  
+  // Metadata
+  status               TranslationStatus @default(PENDING)
+  isAutoTranslated     Boolean   @default(false) @map("is_auto_translated")
+  translatedBy         String?   @map("translated_by") @db.Uuid
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  collection           Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  
+  @@unique([collectionId, languageCode])
+  @@index([languageCode], name: "idx_collection_translations_language")
+  @@map("collection_translations")
+}
+
+model BrandTranslation {
+  id                   String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  brandId              String    @map("brand_id") @db.Uuid
+  languageCode         String    @map("language_code") @db.VarChar(10)
+  
+  // Translatable fields
+  description          String?   @db.Text
+  story                String?   @db.Text
+  
+  // Metadata
+  status               TranslationStatus @default(PENDING)
+  isAutoTranslated     Boolean   @default(false) @map("is_auto_translated")
+  translatedBy         String?   @map("translated_by") @db.Uuid
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Relations
+  brand                Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  
+  @@unique([brandId, languageCode])
+  @@index([languageCode], name: "idx_brand_translations_language")
+  @@map("brand_translations")
+}
+
+// =============================================
+// FEATURE FLAGS (NEW)
+// =============================================
+
+model FeatureFlag {
+  key            String    @id @db.VarChar(100)
+  enabled        Boolean   @default(false)
+  rollout        Decimal   @default(0) @db.Decimal(5,2) // 0-100 percentage
+  userGroups     String[]  @map("user_groups")
+  
+  // Targeting rules
+  targetingRules Json?     @map("targeting_rules") @db.JsonB
+  
+  // Metadata
+  description    String?   @db.Text
+  metadata       Json?     @db.JsonB
+  
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  
+  @@index([enabled], name: "idx_feature_flags_enabled")
+  @@map("feature_flags")
+}
+
+// =============================================
+// PERFORMANCE METRICS (NEW)
+// =============================================
+
+model PerformanceMetric {
+  id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  metricType    String    @map("metric_type") @db.VarChar(100)
+  
+  // Metric value
+  value         Decimal   @db.Decimal(10,3)
+  unit          String?   @db.VarChar(20)
+  
+  // Context
+  page          String?   @db.VarChar(255)
+  userAgent     String?   @map("user_agent") @db.Text
+  
+  // Additional data
+  metadata      Json?     @db.JsonB
+  
+  recordedAt    DateTime  @default(now()) @map("recorded_at") @db.Timestamptz
+  
+  @@index([metricType, recordedAt(sort: Desc)], name: "idx_performance_metrics")
+  @@index([recordedAt(sort: Desc)], name: "idx_performance_metrics_date")
+  @@map("performance_metrics")
+}
+```
+
+---
+
+### 💾 1.6 `/src/lib/prisma.ts`
+**Purpose**: Prisma client singleton for database connections
+
+```typescript
+import { PrismaClient } from '@prisma/client'
+
+// PrismaClient is attached to the `global` object in development to prevent
+// exhausting your database connection limit.
+//
+// Learn more:
+// https://pris.ly/d/help/next-js-best-practices
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  log: process.env.NODE_ENV === 'development' 
+    ? ['query', 'error', 'warn'] 
+    : ['error'],
+  errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
+})
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+// Export Prisma types for use throughout the app
+export * from '@prisma/client'
+```
+
+---
+
+### 🎨 1.7 `/tailwind.config.ts`
+**Purpose**: Comprehensive Tailwind CSS configuration with custom theme
+
+```typescript
+import type { Config } from 'tailwindcss'
+import { fontFamily } from 'tailwindcss/defaultTheme'
+
+const config = {
+  darkMode: ['class'],
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  prefix: '',
+  theme: {
+    container: {
+      center: true,
+      padding: '2rem',
+      screens: {
+        '2xl': '1400px',
+      },
+    },
+    extend: {
+      fontFamily: {
+        sans: ['var(--font-inter)', ...fontFamily.sans],
+        serif: ['var(--font-fraunces)', ...fontFamily.serif],
+        mono: ['var(--font-jetbrains)', ...fontFamily.mono],
+      },
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        // Custom luxury colors
+        obsidian: {
+          50: '#f5f5f5',
+          100: '#e5e5e5',
+          200: '#c5c5c5',
+          300: '#a5a5a5',
+          400: '#858585',
+          500: '#656565',
+          600: '#454545',
+          700: '#252525',
+          800: '#151515',
+          900: '#0A0A0B',
+          950: '#050505',
+        },
+        neon: {
+          pink: '#FF006E',
+          cyan: '#00D9FF',
+          lime: '#00FF88',
+          purple: '#8B00FF',
+          orange: '#FF6B00',
+        },
+        gold: {
+          light: '#FFD700',
+          DEFAULT: '#DAA520',
+          dark: '#B8860B',
+          rose: '#E0B0B0',
+        },
+        silver: {
+          light: '#E5E4E2',
+          DEFAULT: '#C0C0C0',
+          dark: '#71706E',
+        },
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        shimmer: {
+          '100%': {
+            transform: 'translateX(100%)',
+          },
+        },
+        'fade-in': {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(10px)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)',
+          },
+        },
+        'fade-out': {
+          '0%': {
+            opacity: '1',
+          },
+          '100%': {
+            opacity: '0',
+          },
+        },
+        'slide-in-from-right': {
+          '0%': {
+            transform: 'translateX(100%)',
+          },
+          '100%': {
+            transform: 'translateX(0)',
+          },
+        },
+        'slide-in-from-left': {
+          '0%': {
+            transform: 'translateX(-100%)',
+          },
+          '100%': {
+            transform: 'translateX(0)',
+          },
+        },
+        'slide-in-from-top': {
+          '0%': {
+            transform: 'translateY(-100%)',
+          },
+          '100%': {
+            transform: 'translateY(0)',
+          },
+        },
+        'slide-in-from-bottom': {
+          '0%': {
+            transform: 'translateY(100%)',
+          },
+          '100%': {
+            transform: 'translateY(0)',
+          },
+        },
+        'zoom-in': {
+          '0%': {
+            opacity: '0',
+            transform: 'scale(0.95)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'scale(1)',
+          },
+        },
+        'zoom-out': {
+          '0%': {
+            opacity: '1',
+            transform: 'scale(1)',
+          },
+          '100%': {
+            opacity: '0',
+            transform: 'scale(0.95)',
+          },
+        },
+        float: {
+          '0%, 100%': {
+            transform: 'translateY(0)',
+          },
+          '50%': {
+            transform: 'translateY(-20px)',
+          },
+        },
+        pulse: {
+          '0%, 100%': {
+            opacity: '1',
+          },
+          '50%': {
+            opacity: '0.5',
+          },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+        shimmer: 'shimmer 2s linear infinite',
+        'fade-in': 'fade-in 0.5s ease-out',
+        'fade-out': 'fade-out 0.5s ease-out',
+        'slide-in-from-right': 'slide-in-from-right 0.5s ease-out',
+        'slide-in-from-left': 'slide-in-from-left 0.5s ease-out',
+        'slide-in-from-top': 'slide-in-from-top 0.5s ease-out',
+        'slide-in-from-bottom': 'slide-in-from-bottom 0.5s ease-out',
+        'zoom-in': 'zoom-in 0.5s ease-out',
+        'zoom-out': 'zoom-out 0.5s ease-out',
+        float: 'float 6s ease-in-out infinite',
+        pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      backdropBlur: {
+        xs: '2px',
+      },
+      transitionTimingFunction: {
+        'out-expo': 'cubic-bezier(0.19, 1, 0.22, 1)',
+        'in-out-expo': 'cubic-bezier(0.87, 0, 0.13, 1)',
+        spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      },
+      spacing: {
+        18: '4.5rem',
+        88: '22rem',
+        112: '28rem',
+        128: '32rem',
+        144: '36rem',
+      },
+      aspectRatio: {
+        '4/3': '4 / 3',
+        '3/4': '3 / 4',
+        '5/4': '5 / 4',
+        '4/5': '4 / 5',
+        '9/16': '9 / 16',
+        '2/3': '2 / 3',
+        '3/2': '3 / 2',
+      },
+      fontSize: {
+        '2xs': '0.625rem',
+        '3xl': '1.875rem',
+        '4xl': '2.25rem',
+        '5xl': '3rem',
+        '6xl': '3.75rem',
+        '7xl': '4.5rem',
+        '8xl': '6rem',
+        '9xl': '8rem',
+      },
+      lineHeight: {
+        tighter: '1.1',
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+} satisfies Config
+
+export default config
+```
+
+---
+
+### 🎨 1.8 `/src/styles/globals.css`
+**Purpose**: Global styles with CSS variables and utility classes
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Default light theme */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Dark luxury theme */
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 20% 98%;
+    --primary-foreground: 220.9 39.3% 11%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+  
+  /* Selection */
+  ::selection {
+    @apply bg-primary text-primary-foreground;
+  }
+  
+  /* Focus visible */
+  .focus-visible:focus {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  
+  /* Disable tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* Text gradient utility */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60;
+  }
+  
+  /* Neon glow effect */
+  .neon-glow {
+    filter: drop-
