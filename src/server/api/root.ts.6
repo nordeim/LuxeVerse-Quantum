@@ -1,0 +1,14 @@
+import { createTRPCRouter } from '@/server/api/trpc'
+import { productRouter } from '@/server/api/routers/product'
+import { aiRouter } from '@/server/api/routers/ai'
+import { userRouter } from '@/server/api/routers/user'
+import { orderRouter } from '@/server/api/routers/order'
+
+export const appRouter = createTRPCRouter({
+  product: productRouter,
+  ai: aiRouter,
+  user: userRouter,
+  order: orderRouter,
+})
+
+export type AppRouter = typeof appRouter
