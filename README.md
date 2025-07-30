@@ -490,9 +490,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=luxeverse
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=luxeverse
+      - POSTGRES_USER=luxeverse_user
+      - POSTGRES_PASSWORD=StrongPass123
+      - POSTGRES_DB=luxeverse_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
