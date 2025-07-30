@@ -3243,6 +3243,196 @@ export type UseSessionReturn = ReturnType<typeof useSession>
 
 ```
 
+# src/hooks/use-toast.ts
+```ts
+import * as React from "react"
+import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
+
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
+
+type ToasterToast = ToastProps & {
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+}
+
+const actionTypes = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+} as const
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
+}
+
+type ActionType = typeof actionTypes
+
+type Action =
+  | {
+      type: ActionType["ADD_TOAST"]
+      toast: ToasterToast
+    }
+  | {
+      type: ActionType["UPDATE_TOAST"]
+      toast: Partial<ToasterToast>
+    }
+  | {
+      type: ActionType["DISMISS_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+  | {
+      type: ActionType["REMOVE_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+
+interface State {
+  toasts: ToasterToast[]
+}
+
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const addToRemoveQueue = (toastId: string) => {
+  if (toastTimeouts.has(toastId)) {
+    return
+  }
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId)
+    dispatch({
+      type: "REMOVE_TOAST",
+      toastId: toastId,
+    })
+  }, TOAST_REMOVE_DELAY)
+
+  toastTimeouts.set(toastId, timeout)
+}
+
+export const reducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case "ADD_TOAST":
+      return {
+        ...state,
+        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+      }
+
+    case "UPDATE_TOAST":
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
+        ),
+      }
+
+    case "DISMISS_TOAST": {
+      const { toastId } = action
+
+      if (toastId) {
+        addToRemoveQueue(toastId)
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id)
+        })
+      }
+
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === toastId || toastId === undefined
+            ? {
+                ...t,
+                open: false,
+              }
+            : t
+        ),
+      }
+    }
+    case "REMOVE_TOAST":
+      if (action.toastId === undefined) {
+        return {
+          ...state,
+          toasts: [],
+        }
+      }
+      return {
+        ...state,
+        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+      }
+  }
+}
+
+const listeners: Array<(state: State) => void> = []
+
+let memoryState: State = { toasts: [] }
+
+function dispatch(action: Action) {
+  memoryState = reducer(memoryState, action)
+  listeners.forEach((listener) => {
+    listener(memoryState)
+  })
+}
+
+type Toast = Omit<ToasterToast, "id">
+
+function toast({ ...props }: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: "UPDATE_TOAST",
+      toast: { ...props, id },
+    })
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+  dispatch({
+    type: "ADD_TOAST",
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
+    },
+  })
+
+  return {
+    id: id,
+    dismiss,
+    update,
+  }
+}
+
+function useToast() {
+  const [state, setState] = React.useState<State>(memoryState)
+
+  React.useEffect(() => {
+    listeners.push(setState)
+    return () => {
+      const index = listeners.indexOf(setState)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }, [state])
+
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+  }
+}
+
+export { useToast, toast }
+
+```
+
 # src/store/cart.store.ts
 ```ts
 // src/store/cart.store.ts
@@ -3820,6 +4010,837 @@ export const useCartActions = () => useCartStore(state => ({
 
 ```
 
+# src/lib/openai.ts.orig
+```orig
+import OpenAI from 'openai'
+import { encoding_for_model } from 'tiktoken'
+
+// Initialize OpenAI client
+export const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  maxRetries: 3,
+  timeout: 30 * 1000, // 30 seconds
+})
+
+// Token counting utility
+const encoder = encoding_for_model('gpt-4')
+
+export function countTokens(text: string): number {
+  return encoder.encode(text).length
+}
+
+// =============================================
+// EMBEDDING FUNCTIONS
+// =============================================
+
+/**
+ * Generate embeddings for text using OpenAI's embedding model
+ */
+export async function generateEmbedding(text: string): Promise<number[]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: text.slice(0, 8000), // Limit input length
+      dimensions: 1536,
+    })
+    
+    return response.data[0]?.embedding || []
+  } catch (error) {
+    console.error('Error generating embedding:', error)
+    throw new Error('Failed to generate embedding')
+  }
+}
+
+/**
+ * Generate embeddings for multiple texts in batch
+ */
+export async function generateBatchEmbeddings(
+  texts: string[]
+): Promise<number[][]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: texts.map(text => text.slice(0, 8000)),
+      dimensions: 1536,
+    })
+    
+    return response.data.map(item => item.embedding)
+  } catch (error) {
+    console.error('Error generating batch embeddings:', error)
+    throw new Error('Failed to generate batch embeddings')
+  }
+}
+
+// =============================================
+// RECOMMENDATION FUNCTIONS
+// =============================================
+
+/**
+ * Generate personalized product recommendations based on user preferences
+ */
+export async function generateProductRecommendations(params: {
+  userPreferences: string
+  purchaseHistory: string[]
+  currentTrends?: string[]
+  excludeProducts?: string[]
+  count?: number
+}) {
+  const { 
+    userPreferences, 
+    purchaseHistory, 
+    currentTrends = [], 
+    excludeProducts = [],
+    count = 6 
+  } = params
+
+  try {
+    const systemPrompt = `You are a luxury fashion AI assistant with deep knowledge of high-end brands, current trends, and personal styling. Your task is to recommend products that perfectly match the user's style and preferences.
+
+Key considerations:
+1. Focus on luxury and premium quality items
+2. Consider the user's past purchases and style evolution
+3. Balance between safe choices and exciting discoveries
+4. Include both timeless pieces and trendy items
+5. Ensure recommendations are cohesive and can work together`
+
+    const userPrompt = `Based on the following information, recommend ${count} luxury products:
+
+User Preferences:
+${userPreferences}
+
+Purchase History:
+${purchaseHistory.slice(0, 10).join('\n')}
+
+Current Trends to Consider:
+${currentTrends.join(', ')}
+
+Products to Exclude:
+${excludeProducts.join(', ')}
+
+Return a JSON object with the following structure:
+{
+  "recommendations": [
+    {
+      "category": "string",
+      "style": "string",
+      "priceRange": "string",
+      "brand_suggestions": ["brand1", "brand2"],
+      "colors": ["color1", "color2"],
+      "occasion": "string",
+      "reasoning": "string",
+      "match_score": number (0-1)
+    }
+  ],
+  "style_insights": "string",
+  "trend_alignment": "string"
+}`
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating recommendations:', error)
+    throw new Error('Failed to generate recommendations')
+  }
+}
+
+// =============================================
+// STYLE ANALYSIS FUNCTIONS
+// =============================================
+
+/**
+ * Analyze user's style based on their interactions and preferences
+ */
+export async function analyzeUserStyle(params: {
+  favoriteProducts: string[]
+  styleQuizAnswers?: Record<string, any>
+  demographics?: Record<string, any>
+}) {
+  const { favoriteProducts, styleQuizAnswers = {}, demographics = {} } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional fashion stylist and trend analyst. Analyze the user\'s style preferences and create a comprehensive style profile.'
+        },
+        {
+          role: 'user',
+          content: `Analyze this user's style based on:
+
+Favorite Products:
+${favoriteProducts.join('\n')}
+
+Style Quiz Answers:
+${JSON.stringify(styleQuizAnswers, null, 2)}
+
+Demographics:
+${JSON.stringify(demographics, null, 2)}
+
+Provide a JSON response with:
+{
+  "style_personas": ["persona1", "persona2", "persona3"],
+  "color_palette": {
+    "primary": ["color1", "color2"],
+    "accent": ["color3", "color4"],
+    "neutral": ["color5", "color6"]
+  },
+  "style_attributes": {
+    "formality": "casual/smart-casual/formal",
+    "aesthetic": "minimalist/maximalist/eclectic",
+    "trend_adoption": "early/mainstream/classic"
+  },
+  "brand_affinity": ["brand1", "brand2", "brand3"],
+  "style_description": "detailed paragraph",
+  "style_advice": "personalized styling tips"
+}`
+        }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing style:', error)
+    throw new Error('Failed to analyze user style')
+  }
+}
+
+// =============================================
+// PRODUCT DESCRIPTION ENHANCEMENT
+// =============================================
+
+/**
+ * Enhance product descriptions with AI-generated luxury copy
+ */
+export async function enhanceProductDescription(params: {
+  productName: string
+  basicDescription: string
+  category: string
+  brand: string
+  materials?: string[]
+  features?: string[]
+  targetAudience?: string
+}) {
+  const { 
+    productName, 
+    basicDescription, 
+    category, 
+    brand,
+    materials = [],
+    features = [],
+    targetAudience = 'luxury consumers'
+  } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a luxury copywriter for high-end fashion and lifestyle brands. Create compelling, sophisticated product descriptions that evoke desire and emphasize quality, craftsmanship, and exclusivity. Use sensory language and storytelling.`
+        },
+        {
+          role: 'user',
+          content: `Enhance this product description:
+
+Product: ${productName}
+Brand: ${brand}
+Category: ${category}
+Basic Description: ${basicDescription}
+Materials: ${materials.join(', ')}
+Features: ${features.join(', ')}
+Target Audience: ${targetAudience}
+
+Create a JSON response with:
+{
+  "headline": "compelling product headline",
+  "description": "2-3 paragraph luxury description",
+  "key_features": ["feature1", "feature2", "feature3"],
+  "style_notes": "how to style this product",
+  "care_instructions": "care and maintenance tips",
+  "brand_story": "brief brand heritage connection"
+}`
+        }
+      ],
+      temperature: 0.8,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error enhancing description:', error)
+    throw new Error('Failed to enhance product description')
+  }
+}
+
+// =============================================
+// VISUAL SEARCH FUNCTIONS
+// =============================================
+
+/**
+ * Analyze image and extract fashion attributes
+ */
+export async function analyzeProductImage(imageUrl: string) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-vision-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fashion expert who analyzes product images to extract detailed attributes for visual search and recommendations.'
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this fashion product image and extract:
+1. Product category and subcategory
+2. Colors (primary and secondary)
+3. Style attributes
+4. Materials/textures visible
+5. Design details
+6. Occasion/use case
+7. Similar product keywords
+
+Return a JSON object with all attributes.`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl,
+                detail: 'high'
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing image:', error)
+    throw new Error('Failed to analyze product image')
+  }
+}
+
+// =============================================
+// OUTFIT GENERATION FUNCTIONS
+// =============================================
+
+/**
+ * Generate complete outfit suggestions based on a base product
+ */
+export async function generateOutfitSuggestions(params: {
+  baseProduct: {
+    name: string
+    category: string
+    color: string
+    style: string
+  }
+  occasion?: string
+  season?: string
+  budget?: { min: number; max: number }
+  userStyle?: string
+}) {
+  const { baseProduct, occasion = 'versatile', season = 'all-season', budget, userStyle } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional stylist creating complete outfit suggestions. Focus on creating cohesive, stylish looks that work well together.'
+        },
+        {
+          role: 'user',
+          content: `Create outfit suggestions for:
+
+Base Product: ${baseProduct.name}
+Category: ${baseProduct.category}
+Color: ${baseProduct.color}
+Style: ${baseProduct.style}
+Occasion: ${occasion}
+Season: ${season}
+${budget ? `Budget Range: $${budget.min} - $${budget.max}` : ''}
+${userStyle ? `User Style: ${userStyle}` : ''}
+
+Suggest 3 complete outfits with:
+{
+  "outfits": [
+    {
+      "name": "outfit name",
+      "description": "outfit description",
+      "occasion": "specific occasion",
+      "items": [
+        {
+          "category": "item category",
+          "description": "item description",
+          "color_suggestion": "color",
+          "style_notes": "styling tips",
+          "price_range": "price category"
+        }
+      ],
+      "styling_tips": "how to wear this outfit",
+      "alternative_options": "variations or substitutions"
+    }
+  ]
+}`
+        }
+      ],
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating outfits:', error)
+    throw new Error('Failed to generate outfit suggestions')
+  }
+}
+
+// =============================================
+// CHAT & CONVERSATIONAL AI
+// =============================================
+
+/**
+ * Handle conversational AI for style advice and product questions
+ */
+export async function chatWithStyleAssistant(params: {
+  message: string
+  context?: {
+    userStyle?: string
+    recentProducts?: string[]
+    currentPage?: string
+  }
+  conversationHistory?: Array<{ role: string; content: string }>
+}) {
+  const { message, context = {}, conversationHistory = [] } = params
+
+  try {
+    const systemPrompt = `You are LuxeVerse's AI Style Assistant - a knowledgeable, friendly, and sophisticated fashion advisor. 
+
+Your personality:
+- Expert in luxury fashion and styling
+- Warm and approachable, but professional
+- Knowledgeable about trends, brands, and styling techniques
+- Focused on helping users find perfect pieces for their style
+
+Guidelines:
+- Keep responses concise but helpful (2-3 paragraphs max)
+- Always maintain a luxury brand voice
+- Suggest specific actions when relevant
+- Reference the user's style preferences when known
+- Be encouraging and positive about their choices`
+
+    const contextInfo = `
+Current context:
+- User style: ${context.userStyle || 'Not specified'}
+- Recent interests: ${context.recentProducts?.join(', ') || 'None'}
+- Current page: ${context.currentPage || 'Unknown'}`
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'assistant' as const, content: contextInfo },
+      ...conversationHistory.slice(-5), // Keep last 5 messages for context
+      { role: 'user' as const, content: message }
+    ]
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages,
+      temperature: 0.7,
+      max_tokens: 500,
+    })
+
+    return response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response. Please try again.'
+  } catch (error) {
+    console.error('Error in chat:', error)
+    throw new Error('Failed to process chat message')
+  }
+}
+
+// =============================================
+// SIZE RECOMMENDATION
+// =============================================
+
+/**
+ * Generate size recommendations based on user measurements and brand sizing
+ */
+export async function generateSizeRecommendation(params: {
+  userMeasurements?: Record<string, number>
+  productCategory: string
+  brandName: string
+  brandSizeChart?: Record<string, any>
+  previousPurchases?: Array<{
+    brand: string
+    size: string
+    fit: 'too small' | 'perfect' | 'too large'
+  }>
+}) {
+  const { 
+    userMeasurements = {}, 
+    productCategory, 
+    brandName, 
+    brandSizeChart = {},
+    previousPurchases = []
+  } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fit specialist who helps customers find the perfect size. Consider body measurements, brand-specific sizing, and fit preferences.'
+        },
+        {
+          role: 'user',
+          content: `Recommend the best size for:
+
+Product Category: ${productCategory}
+Brand: ${brandName}
+User Measurements: ${JSON.stringify(userMeasurements)}
+Brand Size Chart: ${JSON.stringify(brandSizeChart)}
+Previous Purchases: ${JSON.stringify(previousPurchases)}
+
+Return JSON with:
+{
+  "recommended_size": "size",
+  "confidence_level": "high/medium/low",
+  "fit_notes": "how it will fit",
+  "size_comparison": "compared to other brands",
+  "alternative_sizes": ["size1", "size2"],
+  "measurement_tips": "advice for best fit"
+}`
+        }
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating size recommendation:', error)
+    throw new Error('Failed to generate size recommendation')
+  }
+}
+
+// =============================================
+// TREND ANALYSIS
+// =============================================
+
+/**
+ * Analyze current fashion trends and provide insights
+ */
+export async function analyzeFashionTrends(params: {
+  userInterests: string[]
+  currentSeason: string
+  priceRange?: { min: number; max: number }
+}) {
+  const { userInterests, currentSeason, priceRange } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fashion trend analyst providing insights on current and upcoming trends in luxury fashion.'
+        },
+        {
+          role: 'user',
+          content: `Analyze trends for:
+
+User Interests: ${userInterests.join(', ')}
+Season: ${currentSeason}
+${priceRange ? `Budget: $${priceRange.min} - $${priceRange.max}` : ''}
+
+Provide trend analysis with:
+{
+  "trending_now": [
+    {
+      "trend": "trend name",
+      "description": "trend description",
+      "key_pieces": ["item1", "item2"],
+      "brands_leading": ["brand1", "brand2"],
+      "longevity": "short-term/long-term"
+    }
+  ],
+  "emerging_trends": ["trend1", "trend2"],
+  "timeless_pieces": ["classic1", "classic2"],
+  "personalized_recommendations": "based on user interests",
+  "investment_pieces": ["worth investing in"]
+}`
+        }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing trends:', error)
+    throw new Error('Failed to analyze fashion trends')
+  }
+}
+
+// =============================================
+// SEARCH QUERY ENHANCEMENT
+// =============================================
+
+/**
+ * Enhance search queries with AI to improve results
+ */
+export async function enhanceSearchQuery(query: string) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a search query optimizer for a luxury fashion e-commerce site. Expand and improve search queries to help users find what they\'re looking for.'
+        },
+        {
+          role: 'user',
+          content: `Enhance this search query: "${query}"
+
+Return JSON with:
+{
+  "enhanced_query": "improved search terms",
+  "categories": ["relevant categories"],
+  "brands": ["relevant brands"],
+  "attributes": {
+    "colors": ["colors"],
+    "materials": ["materials"],
+    "styles": ["styles"],
+    "occasions": ["occasions"]
+  },
+  "price_indicator": "budget/mid-range/luxury/ultra-luxury",
+  "related_searches": ["suggestion1", "suggestion2"]
+}`
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error enhancing search query:', error)
+    // Return basic enhancement if AI fails
+    return {
+      enhanced_query: query,
+      categories: [],
+      brands: [],
+      attributes: {},
+      related_searches: []
+    }
+  }
+}
+
+// =============================================
+// UTILITY FUNCTIONS
+// =============================================
+
+/**
+ * Calculate cosine similarity between two vectors
+ */
+export function cosineSimilarity(vec1: number[], vec2: number[]): number {
+  if (vec1.length !== vec2.length) {
+    throw new Error('Vectors must have the same length')
+  }
+
+  let dotProduct = 0
+  let magnitude1 = 0
+  let magnitude2 = 0
+
+  for (let i = 0; i < vec1.length; i++) {
+    dotProduct += vec1[i] * vec2[i]
+    magnitude1 += vec1[i] * vec1[i]
+    magnitude2 += vec2[i] * vec2[i]
+  }
+
+  magnitude1 = Math.sqrt(magnitude1)
+  magnitude2 = Math.sqrt(magnitude2)
+
+  if (magnitude1 === 0 || magnitude2 === 0) {
+    return 0
+  }
+
+  return dotProduct / (magnitude1 * magnitude2)
+}
+
+/**
+ * Find most similar items based on embeddings
+ */
+export function findSimilarItems<T extends { embedding: number[] }>(
+  targetEmbedding: number[],
+  items: T[],
+  topK: number = 10
+): Array<T & { similarity: number }> {
+  const similarities = items.map(item => ({
+    ...item,
+    similarity: cosineSimilarity(targetEmbedding, item.embedding)
+  }))
+
+  return similarities
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, topK)
+}
+
+/**
+ * Rate limit helper for AI API calls
+ */
+export class RateLimiter {
+  private queue: Array<() => Promise<any>> = []
+  private processing = false
+  private lastCall = 0
+  private minInterval: number
+
+  constructor(callsPerMinute: number = 60) {
+    this.minInterval = 60000 / callsPerMinute
+  }
+
+  async add<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await fn()
+          resolve(result)
+        } catch (error) {
+          reject(error)
+        }
+      })
+      
+      if (!this.processing) {
+        this.process()
+      }
+    })
+  }
+
+  private async process() {
+    this.processing = true
+    
+    while (this.queue.length > 0) {
+      const now = Date.now()
+      const timeSinceLastCall = now - this.lastCall
+      
+      if (timeSinceLastCall < this.minInterval) {
+        await new Promise(resolve => 
+          setTimeout(resolve, this.minInterval - timeSinceLastCall)
+        )
+      }
+      
+      const fn = this.queue.shift()
+      if (fn) {
+        this.lastCall = Date.now()
+        await fn()
+      }
+    }
+    
+    this.processing = false
+  }
+}
+
+// Create a rate limiter instance for OpenAI calls
+export const openAIRateLimiter = new RateLimiter(60) // 60 calls per minute
+
+// =============================================
+// ERROR HANDLING
+// =============================================
+
+export class OpenAIError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public statusCode?: number
+  ) {
+    super(message)
+    this.name = 'OpenAIError'
+  }
+}
+
+/**
+ * Wrap OpenAI calls with proper error handling
+ */
+export async function withOpenAIErrorHandling<T>(
+  fn: () => Promise<T>,
+  fallback?: T
+): Promise<T> {
+  try {
+    return await fn()
+  } catch (error: any) {
+    console.error('OpenAI API Error:', error)
+    
+    if (error.response?.status === 429) {
+      throw new OpenAIError('Rate limit exceeded', 'RATE_LIMIT', 429)
+    }
+    
+    if (error.response?.status === 401) {
+      throw new OpenAIError('Invalid API key', 'UNAUTHORIZED', 401)
+    }
+    
+    if (error.response?.status === 503) {
+      throw new OpenAIError('Service unavailable', 'SERVICE_UNAVAILABLE', 503)
+    }
+    
+    if (fallback !== undefined) {
+      return fallback
+    }
+    
+    throw new OpenAIError(
+      error.message || 'Unknown error occurred',
+      'UNKNOWN',
+      error.response?.status
+    )
+  }
+}
+
+```
+
 # src/lib/prisma.ts
 ```ts
 import { PrismaClient } from '@prisma/client'
@@ -3917,6 +4938,114 @@ export async function checkDatabaseConnection(): Promise<boolean> {
     console.error('Database connection failed:', error)
     return false
   }
+}
+
+```
+
+# src/lib/redis.ts
+```ts
+import { Redis } from '@upstash/redis'
+
+// Create Redis client
+export const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+})
+
+// Helper functions for common operations
+export const cache = {
+  async get<T>(key: string): Promise<T | null> {
+    try {
+      const data = await redis.get(key)
+      return data as T
+    } catch (error) {
+      console.error('Redis get error:', error)
+      return null
+    }
+  },
+
+  async set(key: string, value: any, expirationInSeconds?: number): Promise<void> {
+    try {
+      if (expirationInSeconds) {
+        await redis.setex(key, expirationInSeconds, JSON.stringify(value))
+      } else {
+        await redis.set(key, JSON.stringify(value))
+      }
+    } catch (error) {
+      console.error('Redis set error:', error)
+    }
+  },
+
+  async delete(key: string): Promise<void> {
+    try {
+      await redis.del(key)
+    } catch (error) {
+      console.error('Redis delete error:', error)
+    }
+  },
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      const result = await redis.exists(key)
+      return result === 1
+    } catch (error) {
+      console.error('Redis exists error:', error)
+      return false
+    }
+  },
+
+  async increment(key: string, amount = 1): Promise<number | null> {
+    try {
+      const result = await redis.incrby(key, amount)
+      return result
+    } catch (error) {
+      console.error('Redis increment error:', error)
+      return null
+    }
+  },
+
+  async expire(key: string, seconds: number): Promise<void> {
+    try {
+      await redis.expire(key, seconds)
+    } catch (error) {
+      console.error('Redis expire error:', error)
+    }
+  },
+}
+
+// Key generators for consistent naming
+export const cacheKeys = {
+  // AI recommendations
+  recommendations: (userId: string, params: any) => 
+    `recommendations:${userId}:${JSON.stringify(params)}`,
+  
+  // Visual search
+  visualSearch: (imageUrl: string) => 
+    `visual_search:${imageUrl}`,
+  
+  // Outfit suggestions
+  outfits: (productId: string, occasion?: string, season?: string) => 
+    `outfits:${productId}:${occasion || 'all'}:${season || 'all'}`,
+  
+  // Product descriptions
+  productDescription: (productId: string) => 
+    `enhanced_desc:${productId}`,
+  
+  // Trends
+  trends: (params: any) => 
+    `trends:${JSON.stringify(params)}`,
+  
+  // Similar products
+  similarProducts: (productId: string, limit: number) => 
+    `similar:${productId}:${limit}`,
+  
+  // User style profile
+  styleProfile: (userId: string) => 
+    `style_profile:${userId}`,
+  
+  // Rate limiting
+  rateLimit: (key: string, userId: string) => 
+    `rate_limit:${key}:${userId}`,
 }
 
 ```
@@ -4319,6 +5448,82 @@ export async function requireRole(role: UserRole | UserRole[]) {
 
 ```
 
+# src/lib/utils.ts
+```ts
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+export function formatPrice(
+  price: number | string,
+  options: {
+    currency?: 'USD' | 'EUR' | 'GBP'
+    notation?: Intl.NumberFormatOptions['notation']
+  } = {}
+) {
+  const { currency = 'USD', notation = 'standard' } = options
+
+  const numericPrice = typeof price === 'string' ? parseFloat(price) : price
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    notation,
+    maximumFractionDigits: 2,
+  }).format(numericPrice)
+}
+
+export function formatDate(date: Date | string | number) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
+```
+
+# src/lib/api.ts
+```ts
+import { httpBatchLink, loggerLink } from '@trpc/client'
+import { createTRPCNext } from '@trpc/next'
+import { type inferRouterInputs, type inferRouterOutputs } from '@trpc/server'
+import superjson from 'superjson'
+import { type AppRouter } from '@/server/api/root'
+
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') return '' // browser should use relative url
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}` // SSR should use vercel url
+  return `http://localhost:${process.env.PORT ?? 3000}` // dev SSR should use localhost
+}
+
+export const api = createTRPCNext<AppRouter>({
+  config() {
+    return {
+      transformer: superjson,
+      links: [
+        loggerLink({
+          enabled: (opts) =>
+            process.env.NODE_ENV === 'development' ||
+            (opts.direction === 'down' && opts.result instanceof Error),
+        }),
+        httpBatchLink({
+          url: `${getBaseUrl()}/api/trpc`,
+        }),
+      ],
+    }
+  },
+  ssr: false,
+})
+
+export type RouterInputs = inferRouterInputs<AppRouter>
+export type RouterOutputs = inferRouterOutputs<AppRouter>
+
+```
+
 # src/lib/stripe.ts
 ```ts
 // src/lib/stripe.ts
@@ -4558,6 +5763,902 @@ export function formatStripeAmount(amount: number, currency: string = 'usd') {
     style: 'currency',
     currency: currency.toUpperCase(),
   }).format(amount / 100)
+}
+
+```
+
+# src/lib/openai.ts-patch
+```ts-patch
+import OpenAI from 'openai'
+
+// Initialize OpenAI client
+export const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  maxRetries: 3,
+  timeout: 30 * 1000, // 30 seconds
+})
+
+// Simple token estimation (more accurate would require tiktoken on server-side only)
+export function estimateTokens(text: string): number {
+  // Rough estimation: ~4 characters per token
+  return Math.ceil(text.length / 4)
+}
+
+// =============================================
+// EMBEDDING FUNCTIONS
+// =============================================
+
+/**
+ * Generate embeddings for text using OpenAI's embedding model
+ */
+export async function generateEmbedding(text: string): Promise<number[]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: text.slice(0, 8000), // Limit input length
+      dimensions: 1536,
+    })
+    
+    return response.data[0]?.embedding || []
+  } catch (error) {
+    console.error('Error generating embedding:', error)
+    throw new Error('Failed to generate embedding')
+  }
+}
+
+/**
+ * Generate embeddings for multiple texts in batch
+ */
+export async function generateBatchEmbeddings(
+  texts: string[]
+): Promise<number[][]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: texts.map(text => text.slice(0, 8000)),
+      dimensions: 1536,
+    })
+    
+    return response.data.map(item => item.embedding)
+  } catch (error) {
+    console.error('Error generating batch embeddings:', error)
+    throw new Error('Failed to generate batch embeddings')
+  }
+}
+
+// [Rest of the file remains the same as the contributor's version, 
+// just without the tiktoken import and encoding_for_model usage]
+
+// ... (all other functions remain identical)
+
+```
+
+# src/lib/openai.ts
+```ts
+// File: src/lib/openai.ts
+import OpenAI from 'openai'
+
+// Initialize OpenAI client
+export const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  maxRetries: 3,
+  timeout: 30 * 1000, // 30 seconds
+})
+
+// Simple token estimation (more accurate would require tiktoken on server-side only)
+export function estimateTokens(text: string): number {
+  // Rough estimation: ~4 characters per token
+  return Math.ceil(text.length / 4)
+}
+
+// =============================================
+// EMBEDDING FUNCTIONS
+// =============================================
+
+/**
+ * Generate embeddings for text using OpenAI's embedding model
+ */
+export async function generateEmbedding(text: string): Promise<number[]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: text.slice(0, 8000), // Limit input length
+      dimensions: 1536,
+    })
+    
+    return response.data[0]?.embedding || []
+  } catch (error) {
+    console.error('Error generating embedding:', error)
+    throw new Error('Failed to generate embedding')
+  }
+}
+
+/**
+ * Generate embeddings for multiple texts in batch
+ */
+export async function generateBatchEmbeddings(
+  texts: string[]
+): Promise<number[][]> {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-large',
+      input: texts.map(text => text.slice(0, 8000)),
+      dimensions: 1536,
+    })
+    
+    return response.data.map(item => item.embedding)
+  } catch (error) {
+    console.error('Error generating batch embeddings:', error)
+    throw new Error('Failed to generate batch embeddings')
+  }
+}
+
+// =============================================
+// RECOMMENDATION FUNCTIONS
+// =============================================
+
+/**
+ * Generate personalized product recommendations based on user preferences
+ */
+export async function generateProductRecommendations(params: {
+  userPreferences: string
+  purchaseHistory: string[]
+  currentTrends?: string[]
+  excludeProducts?: string[]
+  count?: number
+}) {
+  const { 
+    userPreferences, 
+    purchaseHistory, 
+    currentTrends = [], 
+    excludeProducts = [],
+    count = 6 
+  } = params
+
+  try {
+    const systemPrompt = `You are a luxury fashion AI assistant with deep knowledge of high-end brands, current trends, and personal styling. Your task is to recommend products that perfectly match the user's style and preferences.
+
+Key considerations:
+1. Focus on luxury and premium quality items
+2. Consider the user's past purchases and style evolution
+3. Balance between safe choices and exciting discoveries
+4. Include both timeless pieces and trendy items
+5. Ensure recommendations are cohesive and can work together`
+
+    const userPrompt = `Based on the following information, recommend ${count} luxury products:
+
+User Preferences:
+${userPreferences}
+
+Purchase History:
+${purchaseHistory.slice(0, 10).join('\n')}
+
+Current Trends to Consider:
+${currentTrends.join(', ')}
+
+Products to Exclude:
+${excludeProducts.join(', ')}
+
+Return a JSON object with the following structure:
+{
+  "recommendations": [
+    {
+      "category": "string",
+      "style": "string",
+      "priceRange": "string",
+      "brand_suggestions": ["brand1", "brand2"],
+      "colors": ["color1", "color2"],
+      "occasion": "string",
+      "reasoning": "string",
+      "match_score": number (0-1)
+    }
+  ],
+  "style_insights": "string",
+  "trend_alignment": "string"
+}`
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating recommendations:', error)
+    throw new Error('Failed to generate recommendations')
+  }
+}
+
+// =============================================
+// STYLE ANALYSIS FUNCTIONS
+// =============================================
+
+/**
+ * Analyze user's style based on their interactions and preferences
+ */
+export async function analyzeUserStyle(params: {
+  favoriteProducts: string[]
+  styleQuizAnswers?: Record<string, any>
+  demographics?: Record<string, any>
+}) {
+  const { favoriteProducts, styleQuizAnswers = {}, demographics = {} } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional fashion stylist and trend analyst. Analyze the user\'s style preferences and create a comprehensive style profile.'
+        },
+        {
+          role: 'user',
+          content: `Analyze this user's style based on:
+
+Favorite Products:
+${favoriteProducts.join('\n')}
+
+Style Quiz Answers:
+${JSON.stringify(styleQuizAnswers, null, 2)}
+
+Demographics:
+${JSON.stringify(demographics, null, 2)}
+
+Provide a JSON response with:
+{
+  "style_personas": ["persona1", "persona2", "persona3"],
+  "color_palette": {
+    "primary": ["color1", "color2"],
+    "accent": ["color3", "color4"],
+    "neutral": ["color5", "color6"]
+  },
+  "style_attributes": {
+    "formality": "casual/smart-casual/formal",
+    "aesthetic": "minimalist/maximalist/eclectic",
+    "trend_adoption": "early/mainstream/classic"
+  },
+  "brand_affinity": ["brand1", "brand2", "brand3"],
+  "style_description": "detailed paragraph",
+  "style_advice": "personalized styling tips"
+}`
+        }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing style:', error)
+    throw new Error('Failed to analyze user style')
+  }
+}
+
+// =============================================
+// PRODUCT DESCRIPTION ENHANCEMENT
+// =============================================
+
+/**
+ * Enhance product descriptions with AI-generated luxury copy
+ */
+export async function enhanceProductDescription(params: {
+  productName: string
+  basicDescription: string
+  category: string
+  brand: string
+  materials?: string[]
+  features?: string[]
+  targetAudience?: string
+}) {
+  const { 
+    productName, 
+    basicDescription, 
+    category, 
+    brand,
+    materials = [],
+    features = [],
+    targetAudience = 'luxury consumers'
+  } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a luxury copywriter for high-end fashion and lifestyle brands. Create compelling, sophisticated product descriptions that evoke desire and emphasize quality, craftsmanship, and exclusivity. Use sensory language and storytelling.`
+        },
+        {
+          role: 'user',
+          content: `Enhance this product description:
+
+Product: ${productName}
+Brand: ${brand}
+Category: ${category}
+Basic Description: ${basicDescription}
+Materials: ${materials.join(', ')}
+Features: ${features.join(', ')}
+Target Audience: ${targetAudience}
+
+Create a JSON response with:
+{
+  "headline": "compelling product headline",
+  "description": "2-3 paragraph luxury description",
+  "key_features": ["feature1", "feature2", "feature3"],
+  "style_notes": "how to style this product",
+  "care_instructions": "care and maintenance tips",
+  "brand_story": "brief brand heritage connection"
+}`
+        }
+      ],
+      temperature: 0.8,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error enhancing description:', error)
+    throw new Error('Failed to enhance product description')
+  }
+}
+
+// =============================================
+// VISUAL SEARCH FUNCTIONS
+// =============================================
+
+/**
+ * Analyze image and extract fashion attributes
+ */
+export async function analyzeProductImage(imageUrl: string) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-vision-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fashion expert who analyzes product images to extract detailed attributes for visual search and recommendations.'
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this fashion product image and extract:
+1. Product category and subcategory
+2. Colors (primary and secondary)
+3. Style attributes
+4. Materials/textures visible
+5. Design details
+6. Occasion/use case
+7. Similar product keywords
+
+Return a JSON object with all attributes.`
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl,
+                detail: 'high'
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.3,
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing image:', error)
+    throw new Error('Failed to analyze product image')
+  }
+}
+
+// =============================================
+// OUTFIT GENERATION FUNCTIONS
+// =============================================
+
+/**
+ * Generate complete outfit suggestions based on a base product
+ */
+export async function generateOutfitSuggestions(params: {
+  baseProduct: {
+    name: string
+    category: string
+    color: string
+    style: string
+  }
+  occasion?: string
+  season?: string
+  budget?: { min: number; max: number }
+  userStyle?: string
+}) {
+  const { baseProduct, occasion = 'versatile', season = 'all-season', budget, userStyle } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional stylist creating complete outfit suggestions. Focus on creating cohesive, stylish looks that work well together.'
+        },
+        {
+          role: 'user',
+          content: `Create outfit suggestions for:
+
+Base Product: ${baseProduct.name}
+Category: ${baseProduct.category}
+Color: ${baseProduct.color}
+Style: ${baseProduct.style}
+Occasion: ${occasion}
+Season: ${season}
+${budget ? `Budget Range: $${budget.min} - $${budget.max}` : ''}
+${userStyle ? `User Style: ${userStyle}` : ''}
+
+Suggest 3 complete outfits with:
+{
+  "outfits": [
+    {
+      "name": "outfit name",
+      "description": "outfit description",
+      "occasion": "specific occasion",
+      "items": [
+        {
+          "category": "item category",
+          "description": "item description",
+          "color_suggestion": "color",
+          "style_notes": "styling tips",
+          "price_range": "price category"
+        }
+      ],
+      "styling_tips": "how to wear this outfit",
+      "alternative_options": "variations or substitutions"
+    }
+  ]
+}`
+        }
+      ],
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating outfits:', error)
+    throw new Error('Failed to generate outfit suggestions')
+  }
+}
+
+// =============================================
+// CHAT & CONVERSATIONAL AI
+// =============================================
+
+/**
+ * Handle conversational AI for style advice and product questions
+ */
+export async function chatWithStyleAssistant(params: {
+  message: string
+  context?: {
+    userStyle?: string
+    recentProducts?: string[]
+    currentPage?: string
+  }
+  conversationHistory?: Array<{ role: string; content: string }>
+}) {
+  const { message, context = {}, conversationHistory = [] } = params
+
+  try {
+    const systemPrompt = `You are LuxeVerse's AI Style Assistant - a knowledgeable, friendly, and sophisticated fashion advisor. 
+
+Your personality:
+- Expert in luxury fashion and styling
+- Warm and approachable, but professional
+- Knowledgeable about trends, brands, and styling techniques
+- Focused on helping users find perfect pieces for their style
+
+Guidelines:
+- Keep responses concise but helpful (2-3 paragraphs max)
+- Always maintain a luxury brand voice
+- Suggest specific actions when relevant
+- Reference the user's style preferences when known
+- Be encouraging and positive about their choices`
+
+    const contextInfo = `
+Current context:
+- User style: ${context.userStyle || 'Not specified'}
+- Recent interests: ${context.recentProducts?.join(', ') || 'None'}
+- Current page: ${context.currentPage || 'Unknown'}`
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      { role: 'assistant' as const, content: contextInfo },
+      ...conversationHistory.slice(-5), // Keep last 5 messages for context
+      { role: 'user' as const, content: message }
+    ]
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages,
+      temperature: 0.7,
+      max_tokens: 500,
+    })
+
+    return response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response. Please try again.'
+  } catch (error) {
+    console.error('Error in chat:', error)
+    throw new Error('Failed to process chat message')
+  }
+}
+
+// =============================================
+// SIZE RECOMMENDATION
+// =============================================
+
+/**
+ * Generate size recommendations based on user measurements and brand sizing
+ */
+export async function generateSizeRecommendation(params: {
+  userMeasurements?: Record<string, number>
+  productCategory: string
+  brandName: string
+  brandSizeChart?: Record<string, any>
+  previousPurchases?: Array<{
+    brand: string
+    size: string
+    fit: 'too small' | 'perfect' | 'too large'
+  }>
+}) {
+  const { 
+    userMeasurements = {}, 
+    productCategory, 
+    brandName, 
+    brandSizeChart = {},
+    previousPurchases = []
+  } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fit specialist who helps customers find the perfect size. Consider body measurements, brand-specific sizing, and fit preferences.'
+        },
+        {
+          role: 'user',
+          content: `Recommend the best size for:
+
+Product Category: ${productCategory}
+Brand: ${brandName}
+User Measurements: ${JSON.stringify(userMeasurements)}
+Brand Size Chart: ${JSON.stringify(brandSizeChart)}
+Previous Purchases: ${JSON.stringify(previousPurchases)}
+
+Return JSON with:
+{
+  "recommended_size": "size",
+  "confidence_level": "high/medium/low",
+  "fit_notes": "how it will fit",
+  "size_comparison": "compared to other brands",
+  "alternative_sizes": ["size1", "size2"],
+  "measurement_tips": "advice for best fit"
+}`
+        }
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error generating size recommendation:', error)
+    throw new Error('Failed to generate size recommendation')
+  }
+}
+
+// =============================================
+// TREND ANALYSIS
+// =============================================
+
+/**
+ * Analyze current fashion trends and provide insights
+ */
+export async function analyzeFashionTrends(params: {
+  userInterests: string[]
+  currentSeason: string
+  priceRange?: { min: number; max: number }
+}) {
+  const { userInterests, currentSeason, priceRange } = params
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4-turbo-preview',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a fashion trend analyst providing insights on current and upcoming trends in luxury fashion.'
+        },
+        {
+          role: 'user',
+          content: `Analyze trends for:
+
+User Interests: ${userInterests.join(', ')}
+Season: ${currentSeason}
+${priceRange ? `Budget: $${priceRange.min} - $${priceRange.max}` : ''}
+
+Provide trend analysis with:
+{
+  "trending_now": [
+    {
+      "trend": "trend name",
+      "description": "trend description",
+      "key_pieces": ["item1", "item2"],
+      "brands_leading": ["brand1", "brand2"],
+      "longevity": "short-term/long-term"
+    }
+  ],
+  "emerging_trends": ["trend1", "trend2"],
+  "timeless_pieces": ["classic1", "classic2"],
+  "personalized_recommendations": "based on user interests",
+  "investment_pieces": ["worth investing in"]
+}`
+        }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error analyzing trends:', error)
+    throw new Error('Failed to analyze fashion trends')
+  }
+}
+
+// =============================================
+// SEARCH QUERY ENHANCEMENT
+// =============================================
+
+/**
+ * Enhance search queries with AI to improve results
+ */
+export async function enhanceSearchQuery(query: string) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a search query optimizer for a luxury fashion e-commerce site. Expand and improve search queries to help users find what they\'re looking for.'
+        },
+        {
+          role: 'user',
+          content: `Enhance this search query: "${query}"
+
+Return JSON with:
+{
+  "enhanced_query": "improved search terms",
+  "categories": ["relevant categories"],
+  "brands": ["relevant brands"],
+  "attributes": {
+    "colors": ["colors"],
+    "materials": ["materials"],
+    "styles": ["styles"],
+    "occasions": ["occasions"]
+  },
+  "price_indicator": "budget/mid-range/luxury/ultra-luxury",
+  "related_searches": ["suggestion1", "suggestion2"]
+}`
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+      response_format: { type: 'json_object' },
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error('No response from AI')
+
+    return JSON.parse(content)
+  } catch (error) {
+    console.error('Error enhancing search query:', error)
+    // Return basic enhancement if AI fails
+    return {
+      enhanced_query: query,
+      categories: [],
+      brands: [],
+      attributes: {},
+      related_searches: []
+    }
+  }
+}
+
+// =============================================
+// UTILITY FUNCTIONS
+// =============================================
+
+/**
+ * Calculate cosine similarity between two vectors
+ */
+export function cosineSimilarity(vec1: number[], vec2: number[]): number {
+  if (vec1.length !== vec2.length) {
+    throw new Error('Vectors must have the same length')
+  }
+
+  let dotProduct = 0
+  let magnitude1 = 0
+  let magnitude2 = 0
+
+  for (let i = 0; i < vec1.length; i++) {
+    dotProduct += vec1[i] * vec2[i]
+    magnitude1 += vec1[i] * vec1[i]
+    magnitude2 += vec2[i] * vec2[i]
+  }
+
+  magnitude1 = Math.sqrt(magnitude1)
+  magnitude2 = Math.sqrt(magnitude2)
+
+  if (magnitude1 === 0 || magnitude2 === 0) {
+    return 0
+  }
+
+  return dotProduct / (magnitude1 * magnitude2)
+}
+
+/**
+ * Find most similar items based on embeddings
+ */
+export function findSimilarItems<T extends { embedding: number[] }>(
+  targetEmbedding: number[],
+  items: T[],
+  topK: number = 10
+): Array<T & { similarity: number }> {
+  const similarities = items.map(item => ({
+    ...item,
+    similarity: cosineSimilarity(targetEmbedding, item.embedding)
+  }))
+
+  return similarities
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, topK)
+}
+
+/**
+ * Rate limit helper for AI API calls
+ */
+export class RateLimiter {
+  private queue: Array<() => Promise<any>> = []
+  private processing = false
+  private lastCall = 0
+  private minInterval: number
+
+  constructor(callsPerMinute: number = 60) {
+    this.minInterval = 60000 / callsPerMinute
+  }
+
+  async add<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await fn()
+          resolve(result)
+        } catch (error) {
+          reject(error)
+        }
+      })
+      
+      if (!this.processing) {
+        this.process()
+      }
+    })
+  }
+
+  private async process() {
+    this.processing = true
+    
+    while (this.queue.length > 0) {
+      const now = Date.now()
+      const timeSinceLastCall = now - this.lastCall
+      
+      if (timeSinceLastCall < this.minInterval) {
+        await new Promise(resolve => 
+          setTimeout(resolve, this.minInterval - timeSinceLastCall)
+        )
+      }
+      
+      const fn = this.queue.shift()
+      if (fn) {
+        this.lastCall = Date.now()
+        await fn()
+      }
+    }
+    
+    this.processing = false
+  }
+}
+
+// Create a rate limiter instance for OpenAI calls
+export const openAIRateLimiter = new RateLimiter(60) // 60 calls per minute
+
+// =============================================
+// ERROR HANDLING
+// =============================================
+
+export class OpenAIError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public statusCode?: number
+  ) {
+    super(message)
+    this.name = 'OpenAIError'
+  }
+}
+
+/**
+ * Wrap OpenAI calls with proper error handling
+ */
+export async function withOpenAIErrorHandling<T>(
+  fn: () => Promise<T>,
+  fallback?: T
+): Promise<T> {
+  try {
+    return await fn()
+  } catch (error: any) {
+    console.error('OpenAI API Error:', error)
+    
+    if (error.response?.status === 429) {
+      throw new OpenAIError('Rate limit exceeded', 'RATE_LIMIT', 429)
+    }
+    
+    if (error.response?.status === 401) {
+      throw new OpenAIError('Invalid API key', 'UNAUTHORIZED', 401)
+    }
+    
+    if (error.response?.status === 503) {
+      throw new OpenAIError('Service unavailable', 'SERVICE_UNAVAILABLE', 503)
+    }
+    
+    if (fallback !== undefined) {
+      return fallback
+    }
+    
+    throw new OpenAIError(
+      error.message || 'Unknown error occurred',
+      'UNKNOWN',
+      error.response?.status
+    )
+  }
 }
 
 ```
@@ -5004,6 +7105,63 @@ export function formatStripeAmount(amount: number, currency: string = 'usd') {
     content: " (" attr(href) ")";
   }
 }
+
+```
+
+# src/server/api/root.ts.orig
+```orig
+// src/server/api/root.ts
+import { createTRPCRouter } from '@/server/api/trpc'
+import { productRouter } from '@/server/api/routers/product'
+import { categoryRouter } from '@/server/api/routers/category'
+import { userRouter } from '@/server/api/routers/user'
+import { cartRouter } from '@/server/api/routers/cart'
+import { orderRouter } from '@/server/api/routers/order'
+import { aiRouter } from '@/server/api/routers/ai'
+import { searchRouter } from '@/server/api/routers/search'
+import { reviewRouter } from '@/server/api/routers/review'
+import { wishlistRouter } from '@/server/api/routers/wishlist'
+import { collectionRouter } from '@/server/api/routers/collection'
+
+/**
+ * This is the primary router for your server.
+ *
+ * All routers added in /api/routers should be manually added here.
+ */
+export const appRouter = createTRPCRouter({
+  product: productRouter,
+  category: categoryRouter,
+  collection: collectionRouter,
+  user: userRouter,
+  cart: cartRouter,
+  order: orderRouter,
+  ai: aiRouter,
+  search: searchRouter,
+  review: reviewRouter,
+  wishlist: wishlistRouter,
+})
+
+// Export type definition of API
+export type AppRouter = typeof appRouter
+
+```
+
+# src/server/api/root.ts.6
+```6
+import { createTRPCRouter } from '@/server/api/trpc'
+import { productRouter } from '@/server/api/routers/product'
+import { aiRouter } from '@/server/api/routers/ai'
+import { userRouter } from '@/server/api/routers/user'
+import { orderRouter } from '@/server/api/routers/order'
+
+export const appRouter = createTRPCRouter({
+  product: productRouter,
+  ai: aiRouter,
+  user: userRouter,
+  order: orderRouter,
+})
+
+export type AppRouter = typeof appRouter
 
 ```
 
@@ -6485,6 +8643,1291 @@ export const productRouter = createTRPCRouter({
 
 ```
 
+# src/server/api/routers/ai.ts
+```ts
+import { z } from 'zod'
+import { TRPCError } from '@trpc/server'
+import { 
+  createTRPCRouter, 
+  publicProcedure, 
+  protectedProcedure 
+} from '@/server/api/trpc'
+import { 
+  generateEmbedding,
+  generateProductRecommendations,
+  analyzeUserStyle,
+  enhanceProductDescription,
+  analyzeProductImage,
+  generateOutfitSuggestions,
+  chatWithStyleAssistant,
+  generateSizeRecommendation,
+  analyzeFashionTrends,
+  enhanceSearchQuery,
+  findSimilarItems,
+  openAIRateLimiter,
+  withOpenAIErrorHandling,
+} from '@/lib/openai'
+import { redis } from '@/lib/redis'
+import { ProductStatus } from '@prisma/client'
+
+// Cache TTL constants (in seconds)
+const CACHE_TTL = {
+  RECOMMENDATIONS: 3600, // 1 hour
+  STYLE_PROFILE: 86400, // 24 hours
+  PRODUCT_DESCRIPTION: 604800, // 7 days
+  OUTFIT_SUGGESTIONS: 3600, // 1 hour
+  TRENDS: 86400, // 24 hours
+  SEARCH: 3600, // 1 hour
+}
+
+export const aiRouter = createTRPCRouter({
+  // =============================================
+  // PERSONALIZED RECOMMENDATIONS
+  // =============================================
+  
+  getPersonalizedRecommendations: protectedProcedure
+    .input(z.object({
+      limit: z.number().min(1).max(50).default(12),
+      category: z.string().optional(),
+      priceRange: z.object({
+        min: z.number().optional(),
+        max: z.number().optional(),
+      }).optional(),
+      occasion: z.string().optional(),
+      excludeIds: z.array(z.string()).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id
+      const cacheKey = `recommendations:${userId}:${JSON.stringify(input)}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Get user's style profile and history
+      const [styleProfile, purchaseHistory, recentViews] = await Promise.all([
+        ctx.prisma.styleProfile.findUnique({
+          where: { userId },
+        }),
+        ctx.prisma.order.findMany({
+          where: { 
+            userId,
+            status: 'DELIVERED',
+          },
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        }),
+        ctx.prisma.productView.findMany({
+          where: { userId },
+          include: {
+            product: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          distinct: ['productId'],
+        }),
+      ])
+
+      if (!styleProfile) {
+        // Return trending products if no style profile
+        const trendingProducts = await ctx.prisma.product.findMany({
+          where: {
+            status: ProductStatus.ACTIVE,
+            ...(input.category && { category: { slug: input.category } }),
+            ...(input.priceRange?.min && { price: { gte: input.priceRange.min } }),
+            ...(input.priceRange?.max && { price: { lte: input.priceRange.max } }),
+            ...(input.excludeIds && { id: { notIn: input.excludeIds } }),
+          },
+          include: {
+            media: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+            brand: true,
+            category: true,
+            variants: {
+              where: { isAvailable: true },
+              take: 1,
+            },
+          },
+          orderBy: [
+            { wishlistCount: 'desc' },
+            { viewCount: 'desc' },
+          ],
+          take: input.limit,
+        })
+
+        return {
+          recommendations: trendingProducts,
+          personalizationScore: 0,
+          basedOn: 'trending',
+        }
+      }
+
+      // Generate AI recommendations
+      const userPreferences = `
+        Style: ${styleProfile.stylePersonas.join(', ')}
+        Colors: ${styleProfile.favoriteColors.join(', ')}
+        Brands: ${styleProfile.preferredBrands.join(', ')}
+        Budget: $${styleProfile.minPricePreference}-$${styleProfile.maxPricePreference}
+        ${styleProfile.prefersSustainable ? 'Prefers sustainable options' : ''}
+        ${styleProfile.prefersExclusive ? 'Prefers exclusive items' : ''}
+      `
+
+      const purchaseHistoryText = purchaseHistory
+        .flatMap(order => order.items.map(item => item.product.name))
+        .slice(0, 10)
+
+      const aiRecommendations = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => generateProductRecommendations({
+            userPreferences,
+            purchaseHistory: purchaseHistoryText,
+            count: input.limit,
+          }),
+          null
+        )
+      )
+
+      if (!aiRecommendations) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate recommendations',
+        })
+      }
+
+      // Find matching products based on AI recommendations
+      const recommendedProducts = await Promise.all(
+        aiRecommendations.recommendations.map(async (rec: any) => {
+          const products = await ctx.prisma.product.findMany({
+            where: {
+              status: ProductStatus.ACTIVE,
+              category: {
+                name: {
+                  contains: rec.category,
+                  mode: 'insensitive',
+                },
+              },
+              ...(rec.brand_suggestions && {
+                brand: {
+                  name: {
+                    in: rec.brand_suggestions,
+                  },
+                },
+              }),
+              ...(input.priceRange?.min && { price: { gte: input.priceRange.min } }),
+              ...(input.priceRange?.max && { price: { lte: input.priceRange.max } }),
+              ...(input.excludeIds && { id: { notIn: input.excludeIds } }),
+            },
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+              brand: true,
+              category: true,
+              variants: {
+                where: { isAvailable: true },
+                take: 1,
+              },
+            },
+            orderBy: {
+              wishlistCount: 'desc',
+            },
+            take: 3,
+          })
+
+          return products.map(product => ({
+            ...product,
+            recommendationReason: rec.reasoning,
+            matchScore: rec.match_score,
+          }))
+        })
+      ).then(results => results.flat())
+
+      // If not enough AI recommendations, supplement with similar products
+      if (recommendedProducts.length < input.limit && styleProfile.styleEmbedding) {
+        const allProducts = await ctx.prisma.product.findMany({
+          where: {
+            status: ProductStatus.ACTIVE,
+            productEmbedding: { not: null },
+            id: { 
+              notIn: [
+                ...recommendedProducts.map(p => p.id),
+                ...(input.excludeIds || []),
+              ],
+            },
+          },
+          include: {
+            media: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+            brand: true,
+            category: true,
+            variants: {
+              where: { isAvailable: true },
+              take: 1,
+            },
+          },
+        })
+
+        const similarProducts = findSimilarItems(
+          styleProfile.styleEmbedding as any,
+          allProducts.filter(p => p.productEmbedding) as any,
+          input.limit - recommendedProducts.length
+        )
+
+        recommendedProducts.push(
+          ...similarProducts.map(product => ({
+            ...product,
+            recommendationReason: 'Similar to your style preferences',
+            matchScore: product.similarity,
+          }))
+        )
+      }
+
+      const result = {
+        recommendations: recommendedProducts.slice(0, input.limit),
+        personalizationScore: styleProfile ? 0.9 : 0.3,
+        basedOn: 'ai_personalization',
+        styleInsights: aiRecommendations.style_insights,
+        trendAlignment: aiRecommendations.trend_alignment,
+      }
+
+      // Cache the results
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.RECOMMENDATIONS,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+
+  // =============================================
+  // VISUAL SEARCH
+  // =============================================
+  
+  visualSearch: publicProcedure
+    .input(z.object({
+      imageUrl: z.string().url(),
+      limit: z.number().min(1).max(50).default(20),
+      priceRange: z.object({
+        min: z.number().optional(),
+        max: z.number().optional(),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const cacheKey = `visual_search:${input.imageUrl}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Analyze image with AI
+      const imageAnalysis = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => analyzeProductImage(input.imageUrl),
+          null
+        )
+      )
+
+      if (!imageAnalysis) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to analyze image',
+        })
+      }
+
+      // Search for similar products
+      const searchConditions = {
+        status: ProductStatus.ACTIVE,
+        ...(imageAnalysis.category && {
+          category: {
+            name: {
+              contains: imageAnalysis.category,
+              mode: 'insensitive' as const,
+            },
+          },
+        }),
+        ...(imageAnalysis.colors?.length > 0 && {
+          OR: imageAnalysis.colors.map((color: string) => ({
+            colorAnalysis: {
+              path: ['primary'],
+              string_contains: color.toLowerCase(),
+            },
+          })),
+        }),
+        ...(input.priceRange?.min && { price: { gte: input.priceRange.min } }),
+        ...(input.priceRange?.max && { price: { lte: input.priceRange.max } }),
+      }
+
+      const products = await ctx.prisma.product.findMany({
+        where: searchConditions,
+        include: {
+          media: {
+            where: { isPrimary: true },
+            take: 1,
+          },
+          brand: true,
+          category: true,
+          variants: {
+            where: { isAvailable: true },
+            take: 1,
+          },
+        },
+        take: input.limit * 2, // Get more to filter by embedding similarity
+      })
+
+      // If we have product embeddings, sort by similarity
+      let sortedProducts = products
+      if (products.length > 0 && products[0].productEmbedding) {
+        // Generate embedding for the search query
+        const searchText = `
+          ${imageAnalysis.category} 
+          ${imageAnalysis.style_attributes?.join(' ')} 
+          ${imageAnalysis.colors?.join(' ')}
+          ${imageAnalysis.materials?.join(' ')}
+        `
+        
+        const searchEmbedding = await openAIRateLimiter.add(() =>
+          generateEmbedding(searchText)
+        )
+
+        if (searchEmbedding) {
+          const productsWithSimilarity = products
+            .filter(p => p.productEmbedding)
+            .map(product => ({
+              ...product,
+              similarity: cosineSimilarity(
+                searchEmbedding,
+                product.productEmbedding as any
+              ),
+            }))
+            .sort((a, b) => b.similarity - a.similarity)
+
+          sortedProducts = productsWithSimilarity
+        }
+      }
+
+      const result = {
+        products: sortedProducts.slice(0, input.limit),
+        imageAnalysis,
+        searchAttributes: {
+          category: imageAnalysis.category,
+          colors: imageAnalysis.colors,
+          style: imageAnalysis.style_attributes,
+          materials: imageAnalysis.materials,
+        },
+      }
+
+      // Cache for 1 hour
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.SEARCH,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+
+  // =============================================
+  // STYLE PROFILE GENERATION
+  // =============================================
+  
+  generateStyleProfile: protectedProcedure
+    .input(z.object({
+      quizAnswers: z.record(z.any()),
+      favoriteProductIds: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id
+
+      // Get user's favorite products if provided
+      let favoriteProducts: string[] = []
+      if (input.favoriteProductIds && input.favoriteProductIds.length > 0) {
+        const products = await ctx.prisma.product.findMany({
+          where: {
+            id: { in: input.favoriteProductIds },
+          },
+          select: {
+            name: true,
+            category: { select: { name: true } },
+            brand: { select: { name: true } },
+          },
+        })
+        
+        favoriteProducts = products.map(p => 
+          `${p.name} by ${p.brand?.name || 'Unknown'} (${p.category.name})`
+        )
+      }
+
+      // Get user demographics
+      const user = await ctx.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          membershipTier: true,
+          preferredCurrency: true,
+          createdAt: true,
+        },
+      })
+
+      // Generate style analysis with AI
+      const styleAnalysis = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => analyzeUserStyle({
+            favoriteProducts,
+            styleQuizAnswers: input.quizAnswers,
+            demographics: {
+              membershipTier: user?.membershipTier,
+              currency: user?.preferredCurrency,
+              accountAge: user ? 
+                Math.floor((Date.now() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24)) : 
+                0,
+            },
+          }),
+          null
+        )
+      )
+
+      if (!styleAnalysis) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate style profile',
+        })
+      }
+
+      // Generate embeddings for the style profile
+      const styleText = `
+        ${styleAnalysis.style_personas.join(' ')}
+        ${styleAnalysis.style_description}
+        ${styleAnalysis.brand_affinity.join(' ')}
+      `
+      
+      const styleEmbedding = await openAIRateLimiter.add(() =>
+        generateEmbedding(styleText)
+      )
+
+      // Extract price preferences from quiz answers
+      const priceRange = input.quizAnswers.priceRange || { min: 0, max: 10000 }
+
+      // Create or update style profile
+      const styleProfile = await ctx.prisma.styleProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          stylePersonas: styleAnalysis.style_personas,
+          favoriteColors: styleAnalysis.color_palette.primary,
+          avoidedColors: [],
+          preferredBrands: styleAnalysis.brand_affinity,
+          avoidedMaterials: [],
+          minPricePreference: priceRange.min,
+          maxPricePreference: priceRange.max,
+          sweetSpotPrice: (priceRange.min + priceRange.max) / 2,
+          prefersSustainable: input.quizAnswers.sustainability === 'important',
+          prefersExclusive: input.quizAnswers.exclusivity === 'important',
+          earlyAdopterScore: 
+            styleAnalysis.style_attributes.trend_adoption === 'early' ? 0.8 : 0.5,
+          luxuryAffinityScore: 
+            user?.membershipTier === 'OBSIDIAN' ? 0.9 : 0.6,
+          styleEmbedding: styleEmbedding as any,
+          styleHistory: {
+            analyses: [
+              {
+                date: new Date().toISOString(),
+                analysis: styleAnalysis,
+              },
+            ],
+          },
+        },
+        update: {
+          stylePersonas: styleAnalysis.style_personas,
+          favoriteColors: styleAnalysis.color_palette.primary,
+          preferredBrands: styleAnalysis.brand_affinity,
+          minPricePreference: priceRange.min,
+          maxPricePreference: priceRange.max,
+          sweetSpotPrice: (priceRange.min + priceRange.max) / 2,
+          prefersSustainable: input.quizAnswers.sustainability === 'important',
+          prefersExclusive: input.quizAnswers.exclusivity === 'important',
+          styleEmbedding: styleEmbedding as any,
+          styleHistory: {
+            analyses: ctx.prisma.$queryRaw`
+              jsonb_insert(
+                COALESCE(style_history, '{"analyses": []}'),
+                '{analyses, 0}',
+                ${JSON.stringify({
+                  date: new Date().toISOString(),
+                  analysis: styleAnalysis,
+                })}::jsonb
+              )
+            `,
+          },
+        },
+      })
+
+      // Update user's style profile completion flag
+      await ctx.prisma.user.update({
+        where: { id: userId },
+        data: { styleProfileCompleted: true },
+      })
+
+      // Log AI interaction
+      await ctx.prisma.aiInteraction.create({
+        data: {
+          userId,
+          interactionType: 'STYLE_QUIZ',
+          inputData: {
+            quizAnswers: input.quizAnswers,
+            favoriteProducts,
+          },
+          outputData: styleAnalysis,
+          confidenceScore: 0.85,
+        },
+      })
+
+      return {
+        styleProfile,
+        analysis: styleAnalysis,
+      }
+    }),
+
+  // =============================================
+  // OUTFIT SUGGESTIONS
+  // =============================================
+  
+  generateOutfits: publicProcedure
+    .input(z.object({
+      productId: z.string(),
+      occasion: z.string().optional(),
+      season: z.string().optional(),
+      limit: z.number().min(1).max(5).default(3),
+    }))
+    .query(async ({ ctx, input }) => {
+      const cacheKey = `outfits:${input.productId}:${input.occasion}:${input.season}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Get the base product
+      const baseProduct = await ctx.prisma.product.findUnique({
+        where: { id: input.productId },
+        include: {
+          category: true,
+          brand: true,
+        },
+      })
+
+      if (!baseProduct) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        })
+      }
+
+      // Get user's style if authenticated
+      let userStyle: string | undefined
+      if (ctx.session?.user) {
+        const styleProfile = await ctx.prisma.styleProfile.findUnique({
+          where: { userId: ctx.session.user.id },
+          select: { stylePersonas: true },
+        })
+        userStyle = styleProfile?.stylePersonas.join(', ')
+      }
+
+      // Generate outfit suggestions with AI
+      const outfitSuggestions = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => generateOutfitSuggestions({
+            baseProduct: {
+              name: baseProduct.name,
+              category: baseProduct.category.name,
+              color: (baseProduct.colorAnalysis as any)?.primary || 'neutral',
+              style: baseProduct.styleTags[0] || 'versatile',
+            },
+            occasion: input.occasion,
+            season: input.season,
+            userStyle,
+          }),
+          null
+        )
+      )
+
+      if (!outfitSuggestions) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate outfit suggestions',
+        })
+      }
+
+      // Find matching products for each outfit
+      const outfitsWithProducts = await Promise.all(
+        outfitSuggestions.outfits.slice(0, input.limit).map(async (outfit: any) => {
+          const outfitItems = await Promise.all(
+            outfit.items.map(async (item: any) => {
+              const products = await ctx.prisma.product.findMany({
+                where: {
+                  status: ProductStatus.ACTIVE,
+                  category: {
+                    name: {
+                      contains: item.category,
+                      mode: 'insensitive',
+                    },
+                  },
+                  id: { not: input.productId }, // Exclude the base product
+                },
+                include: {
+                  media: {
+                    where: { isPrimary: true },
+                    take: 1,
+                  },
+                  brand: true,
+                  category: true,
+                  variants: {
+                    where: { isAvailable: true },
+                    take: 1,
+                  },
+                },
+                orderBy: {
+                  wishlistCount: 'desc',
+                },
+                take: 3,
+              })
+
+              return {
+                ...item,
+                suggestedProducts: products,
+              }
+            })
+          )
+
+          return {
+            ...outfit,
+            items: outfitItems,
+            baseProduct,
+          }
+        })
+      )
+
+      const result = {
+        outfits: outfitsWithProducts,
+        baseProduct,
+      }
+
+      // Cache for 1 hour
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.OUTFIT_SUGGESTIONS,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+
+  // =============================================
+  // AI CHAT ASSISTANT
+  // =============================================
+  
+  chat: protectedProcedure
+    .input(z.object({
+      message: z.string().min(1).max(500),
+      conversationId: z.string().optional(),
+      context: z.object({
+        currentPage: z.string().optional(),
+        productId: z.string().optional(),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id
+
+      // Get user's style profile for context
+      const styleProfile = await ctx.prisma.styleProfile.findUnique({
+        where: { userId },
+        select: {
+          stylePersonas: true,
+          favoriteColors: true,
+          preferredBrands: true,
+        },
+      })
+
+      // Get recent products viewed for context
+      const recentProducts = await ctx.prisma.productView.findMany({
+        where: { userId },
+        include: {
+          product: {
+            select: { name: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      })
+
+      // Get conversation history if conversation ID provided
+      let conversationHistory: Array<{ role: string; content: string }> = []
+      if (input.conversationId) {
+        // In a real implementation, you'd fetch from a conversation store
+        // For now, we'll use a simple approach
+      }
+
+      // Generate AI response
+      const response = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => chatWithStyleAssistant({
+            message: input.message,
+            context: {
+              userStyle: styleProfile?.stylePersonas.join(', '),
+              recentProducts: recentProducts.map(v => v.product.name),
+              currentPage: input.context?.currentPage,
+            },
+            conversationHistory,
+          }),
+          'I apologize, but I\'m having trouble processing your request. Please try again.'
+        )
+      )
+
+      // Log the interaction
+      await ctx.prisma.aiInteraction.create({
+        data: {
+          userId,
+          interactionType: 'CHAT',
+          inputData: {
+            message: input.message,
+            context: input.context,
+          },
+          outputData: {
+            response,
+          },
+        },
+      })
+
+      return {
+        response,
+        conversationId: input.conversationId || `conv_${Date.now()}`,
+      }
+    }),
+
+  // =============================================
+  // SIZE RECOMMENDATIONS
+  // =============================================
+  
+  getSizeRecommendation: protectedProcedure
+    .input(z.object({
+      productId: z.string(),
+      variantId: z.string().optional(),
+      measurements: z.record(z.number()).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id
+
+      // Get product and brand information
+      const product = await ctx.prisma.product.findUnique({
+        where: { id: input.productId },
+        include: {
+          brand: true,
+          category: true,
+          variants: true,
+        },
+      })
+
+      if (!product) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        })
+      }
+
+      // Get user's size profile
+      const sizeProfile = await ctx.prisma.sizeProfile.findUnique({
+        where: { userId },
+      })
+
+      // Get previous purchases from the same brand
+      const previousPurchases = await ctx.prisma.orderItem.findMany({
+        where: {
+          order: {
+            userId,
+            status: 'DELIVERED',
+          },
+          product: {
+            brandId: product.brandId,
+          },
+        },
+        include: {
+          product: {
+            select: {
+              category: true,
+            },
+          },
+          variant: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 5,
+      })
+
+      // Generate size recommendation with AI
+      const recommendation = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => generateSizeRecommendation({
+            userMeasurements: input.measurements || 
+              (sizeProfile?.measurements as Record<string, number>) || {},
+            productCategory: product.category.name,
+            brandName: product.brand?.name || 'Unknown',
+            brandSizeChart: {}, // In real implementation, fetch from brand data
+            previousPurchases: previousPurchases.map(item => ({
+              brand: product.brand?.name || 'Unknown',
+              size: item.variant?.size || 'Unknown',
+              fit: 'perfect' as const, // In real implementation, get from reviews
+            })),
+          }),
+          null
+        )
+      )
+
+      if (!recommendation) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to generate size recommendation',
+        })
+      }
+
+      // Save recommendation for future reference
+      if (sizeProfile && input.variantId) {
+        await ctx.prisma.sizeRecommendation.create({
+          data: {
+            sizeProfileId: sizeProfile.id,
+            variantId: input.variantId,
+            recommendedSize: recommendation.recommended_size,
+            confidenceScore: recommendation.confidence_level === 'high' ? 0.9 :
+                           recommendation.confidence_level === 'medium' ? 0.7 : 0.5,
+            fitNotes: recommendation,
+          },
+        })
+      }
+
+      return recommendation
+    }),
+
+  // =============================================
+  // TREND ANALYSIS
+  // =============================================
+  
+  getTrendAnalysis: publicProcedure
+    .input(z.object({
+      categories: z.array(z.string()).optional(),
+      priceRange: z.object({
+        min: z.number().optional(),
+        max: z.number().optional(),
+      }).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const cacheKey = `trends:${JSON.stringify(input)}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Get user interests if authenticated
+      let userInterests: string[] = []
+      if (ctx.session?.user) {
+        const styleProfile = await ctx.prisma.styleProfile.findUnique({
+          where: { userId: ctx.session.user.id },
+          select: {
+            stylePersonas: true,
+            preferredBrands: true,
+          },
+        })
+        
+        if (styleProfile) {
+          userInterests = [
+            ...styleProfile.stylePersonas,
+            ...styleProfile.preferredBrands,
+          ]
+        }
+      }
+
+      // Get current season based on date
+      const month = new Date().getMonth()
+      const currentSeason = 
+        month >= 2 && month <= 4 ? 'Spring' :
+        month >= 5 && month <= 7 ? 'Summer' :
+        month >= 8 && month <= 10 ? 'Fall' : 'Winter'
+
+      // Generate trend analysis with AI
+      const trendAnalysis = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => analyzeFashionTrends({
+            userInterests: userInterests.length > 0 ? userInterests : 
+              ['luxury fashion', 'contemporary style'],
+            currentSeason,
+            priceRange: input.priceRange,
+          }),
+          null
+        )
+      )
+
+      if (!trendAnalysis) {
+        // Return some default trends if AI fails
+        return {
+          trending_now: [],
+          emerging_trends: [],
+          timeless_pieces: [],
+          personalized_recommendations: 'Unable to generate personalized trends',
+          investment_pieces: [],
+        }
+      }
+
+      // Find products matching the trends
+      const trendingProducts = await Promise.all(
+        trendAnalysis.trending_now.slice(0, 3).map(async (trend: any) => {
+          const products = await ctx.prisma.product.findMany({
+            where: {
+              status: ProductStatus.ACTIVE,
+              OR: [
+                { styleTags: { hasSome: [trend.trend.toLowerCase()] } },
+                { description: { contains: trend.trend, mode: 'insensitive' } },
+              ],
+              ...(input.categories && {
+                category: { slug: { in: input.categories } },
+              }),
+              ...(input.priceRange?.min && { price: { gte: input.priceRange.min } }),
+              ...(input.priceRange?.max && { price: { lte: input.priceRange.max } }),
+            },
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+              brand: true,
+              category: true,
+            },
+            orderBy: [
+              { featuredAt: 'desc' },
+              { wishlistCount: 'desc' },
+            ],
+            take: 4,
+          })
+
+          return {
+            ...trend,
+            products,
+          }
+        })
+      )
+
+      const result = {
+        ...trendAnalysis,
+        trending_now: trendingProducts,
+        lastUpdated: new Date().toISOString(),
+      }
+
+      // Cache for 24 hours
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.TRENDS,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+
+  // =============================================
+  // SEARCH ENHANCEMENT
+  // =============================================
+  
+  enhanceSearch: publicProcedure
+    .input(z.object({
+      query: z.string().min(1).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const cacheKey = `search_enhance:${input.query.toLowerCase()}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Enhance search query with AI
+      const enhancement = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => enhanceSearchQuery(input.query),
+          {
+            enhanced_query: input.query,
+            categories: [],
+            brands: [],
+            attributes: {},
+            related_searches: [],
+          }
+        )
+      )
+
+      // Log search for analytics
+      if (ctx.session?.user) {
+        await ctx.prisma.searchLog.create({
+          data: {
+            userId: ctx.session.user.id,
+            query: input.query,
+            searchMethod: 'ai_enhanced',
+          },
+        })
+      }
+
+      // Cache for 1 hour
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.SEARCH,
+        JSON.stringify(enhancement)
+      )
+
+      return enhancement
+    }),
+
+  // =============================================
+  // PRODUCT DESCRIPTION ENHANCEMENT
+  // =============================================
+  
+  enhanceProductDescription: publicProcedure
+    .input(z.object({
+      productId: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const cacheKey = `enhanced_desc:${input.productId}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Get product details
+      const product = await ctx.prisma.product.findUnique({
+        where: { id: input.productId },
+        include: {
+          brand: true,
+          category: true,
+        },
+      })
+
+      if (!product) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        })
+      }
+
+      // If already has AI description, return it
+      if (product.aiDescription) {
+        return {
+          description: product.aiDescription,
+          isEnhanced: true,
+        }
+      }
+
+      // Enhance with AI
+      const enhancement = await openAIRateLimiter.add(() =>
+        withOpenAIErrorHandling(
+          () => enhanceProductDescription({
+            productName: product.name,
+            basicDescription: product.description || '',
+            category: product.category.name,
+            brand: product.brand?.name || 'Luxury Brand',
+            materials: (product.materials as any)?.list || [],
+            features: product.styleTags,
+          }),
+          null
+        )
+      )
+
+      if (!enhancement) {
+        return {
+          description: product.description,
+          isEnhanced: false,
+        }
+      }
+
+      // Save enhanced description
+      await ctx.prisma.product.update({
+        where: { id: input.productId },
+        data: {
+          aiDescription: enhancement.description,
+        },
+      })
+
+      const result = {
+        ...enhancement,
+        isEnhanced: true,
+      }
+
+      // Cache for 7 days
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.PRODUCT_DESCRIPTION,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+
+  // =============================================
+  // SIMILAR PRODUCTS
+  // =============================================
+  
+  getSimilarProducts: publicProcedure
+    .input(z.object({
+      productId: z.string(),
+      limit: z.number().min(1).max(20).default(8),
+    }))
+    .query(async ({ ctx, input }) => {
+      const cacheKey = `similar:${input.productId}:${input.limit}`
+      
+      // Check cache
+      const cached = await redis.get(cacheKey)
+      if (cached) {
+        return JSON.parse(cached as string)
+      }
+
+      // Get the base product
+      const baseProduct = await ctx.prisma.product.findUnique({
+        where: { id: input.productId },
+        include: {
+          category: true,
+          brand: true,
+        },
+      })
+
+      if (!baseProduct) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Product not found',
+        })
+      }
+
+      let similarProducts = []
+
+      // If product has embedding, use vector similarity
+      if (baseProduct.productEmbedding) {
+        const allProducts = await ctx.prisma.product.findMany({
+          where: {
+            status: ProductStatus.ACTIVE,
+            id: { not: input.productId },
+            productEmbedding: { not: null },
+            category: {
+              // Same parent category
+              parentId: baseProduct.category.parentId,
+            },
+          },
+          include: {
+            media: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+            brand: true,
+            category: true,
+            variants: {
+              where: { isAvailable: true },
+              take: 1,
+            },
+          },
+        })
+
+        similarProducts = findSimilarItems(
+          baseProduct.productEmbedding as any,
+          allProducts.filter(p => p.productEmbedding) as any,
+          input.limit
+        )
+      } else {
+        // Fallback to attribute-based similarity
+        similarProducts = await ctx.prisma.product.findMany({
+          where: {
+            status: ProductStatus.ACTIVE,
+            id: { not: input.productId },
+            OR: [
+              { categoryId: baseProduct.categoryId },
+              { brandId: baseProduct.brandId },
+              { styleTags: { hasSome: baseProduct.styleTags } },
+            ],
+          },
+          include: {
+            media: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+            brand: true,
+            category: true,
+            variants: {
+              where: { isAvailable: true },
+              take: 1,
+            },
+          },
+          orderBy: {
+            wishlistCount: 'desc',
+          },
+          take: input.limit,
+        })
+      }
+
+      const result = {
+        baseProduct,
+        similarProducts,
+      }
+
+      // Cache for 1 hour
+      await redis.setex(
+        cacheKey,
+        CACHE_TTL.RECOMMENDATIONS,
+        JSON.stringify(result)
+      )
+
+      return result
+    }),
+})
+
+// Helper function for cosine similarity (imported from openai.ts)
+function cosineSimilarity(vec1: number[], vec2: number[]): number {
+  if (vec1.length !== vec2.length) {
+    throw new Error('Vectors must have the same length')
+  }
+
+  let dotProduct = 0
+  let magnitude1 = 0
+  let magnitude2 = 0
+
+  for (let i = 0; i < vec1.length; i++) {
+    dotProduct += vec1[i] * vec2[i]
+    magnitude1 += vec1[i] * vec1[i]
+    magnitude2 += vec2[i] * vec2[i]
+  }
+
+  magnitude1 = Math.sqrt(magnitude1)
+  magnitude2 = Math.sqrt(magnitude2)
+
+  if (magnitude1 === 0 || magnitude2 === 0) {
+    return 0
+  }
+
+  return dotProduct / (magnitude1 * magnitude2)
+}
+
+```
+
 # src/server/api/routers/checkout.ts
 ```ts
 // src/server/api/routers/checkout.ts
@@ -6858,24 +10301,108 @@ import { collectionRouter } from '@/server/api/routers/collection'
 
 /**
  * This is the primary router for your server.
- *
+ * 
  * All routers added in /api/routers should be manually added here.
+ * 
+ * @see https://trpc.io/docs/router
  */
 export const appRouter = createTRPCRouter({
+  /**
+   * Product management endpoints
+   * - Browse products with filters
+   * - Get product details
+   * - Manage inventory (admin)
+   */
   product: productRouter,
+
+  /**
+   * Category management endpoints
+   * - Browse categories
+   * - Get category hierarchy
+   * - Manage categories (admin)
+   */
   category: categoryRouter,
+
+  /**
+   * Collection management endpoints
+   * - Browse curated collections
+   * - Get collection products
+   * - Manage collections (admin)
+   */
   collection: collectionRouter,
+
+  /**
+   * User account endpoints
+   * - Profile management
+   * - Preferences
+   * - Account settings
+   */
   user: userRouter,
+
+  /**
+   * Shopping cart endpoints
+   * - Add/remove items
+   * - Update quantities
+   * - Apply discounts
+   */
   cart: cartRouter,
+
+  /**
+   * Order management endpoints
+   * - Create orders
+   * - Track orders
+   * - Order history
+   */
   order: orderRouter,
+
+  /**
+   * AI-powered features endpoints
+   * - Personalized recommendations
+   * - Visual search
+   * - Style profiling
+   * - Outfit suggestions
+   * - Size recommendations
+   * - Trend analysis
+   * - AI chat assistant
+   */
   ai: aiRouter,
+
+  /**
+   * Search functionality endpoints
+   * - Product search
+   * - Search suggestions
+   * - Search filters
+   */
   search: searchRouter,
+
+  /**
+   * Product review endpoints
+   * - Submit reviews
+   * - Get product reviews
+   * - Review interactions
+   */
   review: reviewRouter,
+
+  /**
+   * Wishlist management endpoints
+   * - Add/remove items
+   * - Share wishlists
+   * - Price drop notifications
+   */
   wishlist: wishlistRouter,
 })
 
-// Export type definition of API
+/**
+ * Export type definition of API
+ * This type is used on the client to add type safety to the tRPC client
+ */
 export type AppRouter = typeof appRouter
+
+/**
+ * Export reusable router and procedure helpers
+ * These are used to create new routers and ensure consistent patterns
+ */
+export { createTRPCRouter, publicProcedure, protectedProcedure } from '@/server/api/trpc'
 
 ```
 
@@ -7027,6 +10554,821 @@ export const config = {
     '/((?!api/auth|_next/static|_next/image|favicon.ico|public).*)',
   ],
 }
+
+```
+
+# src/components/ui/icons.tsx
+```tsx
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Briefcase,
+  Camera,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Circle,
+  Coffee,
+  Copy,
+  CreditCard,
+  Crown,
+  Download,
+  Edit,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Facebook,
+  FileText,
+  Filter,
+  Gem,
+  Github,
+  Globe,
+  Google,
+  Heart,
+  HelpCircle,
+  Home,
+  Image,
+  Info,
+  Instagram,
+  Layers,
+  Leaf,
+  Link,
+  Loader2,
+  LogIn,
+  LogOut,
+  Mail,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Minimize,
+  Moon,
+  MoreHorizontal,
+  MoreVertical,
+  Package,
+  Phone,
+  Plus,
+  RefreshCw,
+  Repeat,
+  Ruler,
+  Search,
+  Send,
+  Settings,
+  Shield,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Sun,
+  Trash,
+  TrendingUp,
+  Truck,
+  Twitter,
+  Upload,
+  User,
+  UserPlus,
+  X,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
+
+export type Icon = LucideIcon
+
+export const Icons = {
+  // Arrows
+  arrowLeft: ArrowLeft,
+  arrowRight: ArrowRight,
+  arrowUpRight: ArrowUpRight,
+  chevronDown: ChevronDown,
+  chevronLeft: ChevronLeft,
+  chevronRight: ChevronRight,
+  chevronUp: ChevronUp,
+
+  // Actions
+  check: Check,
+  checkCircle: CheckCircle,
+  circle: Circle,
+  copy: Copy,
+  download: Download,
+  edit: Edit,
+  filter: Filter,
+  plus: Plus,
+  refresh: RefreshCw,
+  repeat: Repeat,
+  search: Search,
+  send: Send,
+  trash: Trash,
+  upload: Upload,
+  x: X,
+
+  // UI
+  alertCircle: AlertCircle,
+  ellipsis: Ellipsis,
+  externalLink: ExternalLink,
+  eye: Eye,
+  eyeOff: EyeOff,
+  helpCircle: HelpCircle,
+  info: Info,
+  link: Link,
+  loader: Loader2,
+  menu: Menu,
+  moreHorizontal: MoreHorizontal,
+  moreVertical: MoreVertical,
+  spinner: Loader2,
+
+  // Theme
+  moon: Moon,
+  sun: Sun,
+
+  // User
+  logIn: LogIn,
+  logOut: LogOut,
+  user: User,
+  userPlus: UserPlus,
+
+  // Commerce
+  creditCard: CreditCard,
+  gem: Gem,
+  heart: Heart,
+  package: Package,
+  shoppingBag: ShoppingBag,
+  shoppingCart: ShoppingCart,
+  truck: Truck,
+
+  // Communication
+  mail: Mail,
+  messageCircle: MessageCircle,
+  phone: Phone,
+
+  // Social
+  facebook: Facebook,
+  github: Github,
+  google: Google,
+  instagram: Instagram,
+  twitter: Twitter,
+
+  // Navigation
+  home: Home,
+  mapPin: MapPin,
+  settings: Settings,
+
+  // Special
+  briefcase: Briefcase,
+  camera: Camera,
+  coffee: Coffee,
+  crown: Crown,
+  fileText: FileText,
+  globe: Globe,
+  image: Image,
+  layers: Layers,
+  leaf: Leaf,
+  minimize: Minimize,
+  ruler: Ruler,
+  shield: Shield,
+  sparkles: Sparkles,
+  star: Star,
+  trendingUp: TrendingUp,
+  zap: Zap,
+}
+
+```
+
+# src/components/skeletons/orders-skeleton.tsx
+```tsx
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+
+export function OrdersListSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[...Array(3)].map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <Skeleton className="h-6 w-20" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                {[...Array(3)].map((_, j) => (
+                  <Skeleton key={j} className="h-16 w-16 rounded-md" />
+                ))}
+              </div>
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-9 w-24" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+```
+
+# src/components/features/wishlist-item-card.tsx
+```tsx
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Icons } from '@/components/ui/icons'
+import { formatPrice } from '@/lib/utils'
+import { useCartStore } from '@/store/cart.store'
+import { api } from '@/lib/api'
+import { toast } from '@/hooks/use-toast'
+
+interface WishlistItemCardProps {
+  item: any // Replace with proper type
+  wishlistId: string
+}
+
+export function WishlistItemCard({ item, wishlistId }: WishlistItemCardProps) {
+  const [isRemoving, setIsRemoving] = useState(false)
+  const { addItem } = useCartStore()
+  const utils = api.useContext()
+
+  const handleRemove = async () => {
+    setIsRemoving(true)
+    try {
+      await api.wishlist.removeItem.mutate({
+        wishlistId,
+        itemId: item.id,
+      })
+      
+      await utils.wishlist.getItems.invalidate()
+      
+      toast({
+        title: 'Removed from wishlist',
+        description: `${item.product.name} has been removed from your wishlist.`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to remove item from wishlist.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRemoving(false)
+    }
+  }
+
+  const handleAddToCart = () => {
+    const variant = item.variant || item.product.variants[0]
+    if (variant && variant.inventoryQuantity > 0) {
+      addItem({
+        ...item.product,
+        selectedVariant: variant,
+      })
+      toast({
+        title: 'Added to cart',
+        description: `${item.product.name} has been added to your cart.`,
+      })
+    }
+  }
+
+  const isInStock = item.variant 
+    ? item.variant.inventoryQuantity > 0
+    : item.product.variants.some((v: any) => v.inventoryQuantity > 0)
+
+  const currentPrice = item.variant?.price || item.product.price
+  const comparePrice = item.product.compareAtPrice
+  const isOnSale = comparePrice && comparePrice > currentPrice
+
+  return (
+    <Card className="group overflow-hidden">
+      <div className="relative aspect-square overflow-hidden bg-muted">
+        <Link href={`/products/${item.product.slug}`}>
+          {item.product.media[0] ? (
+            <img
+              src={item.product.media[0].url}
+              alt={item.product.name}
+              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Icons.package className="h-12 w-12 text-muted-foreground" />
+            </div>
+          )}
+        </Link>
+        <Button
+          size="icon"
+          variant="secondary"
+          className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+          onClick={handleRemove}
+          disabled={isRemoving}
+        >
+          {isRemoving ? (
+            <Icons.spinner className="h-4 w-4 animate-spin" />
+          ) : (
+            <Icons.x className="h-4 w-4" />
+          )}
+        </Button>
+        {isOnSale && (
+          <Badge className="absolute left-2 top-2" variant="destructive">
+            Sale
+          </Badge>
+        )}
+      </div>
+      <CardContent className="p-4">
+        <div className="space-y-2">
+          <div>
+            <Link
+              href={`/products/${item.product.slug}`}
+              className="font-medium hover:underline line-clamp-2"
+            >
+              {item.product.name}
+            </Link>
+            {item.product.brand && (
+              <p className="text-sm text-muted-foreground">
+                {item.product.brand.name}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold">{formatPrice(currentPrice)}</p>
+            {isOnSale && (
+              <p className="text-sm text-muted-foreground line-through">
+                {formatPrice(comparePrice)}
+              </p>
+            )}
+          </div>
+          {item.variant && (
+            <p className="text-sm text-muted-foreground">
+              {item.variant.size && `Size: ${item.variant.size}`}
+              {item.variant.color && ` • Color: ${item.variant.color}`}
+            </p>
+          )}
+          <div className="flex items-center justify-between pt-2">
+            <Badge variant={isInStock ? 'secondary' : 'outline'}>
+              {isInStock ? 'In Stock' : 'Out of Stock'}
+            </Badge>
+            <Button
+              size="sm"
+              onClick={handleAddToCart}
+              disabled={!isInStock}
+            >
+              <Icons.shoppingBag className="mr-2 h-4 w-4" />
+              Add to Cart
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+```
+
+# src/components/features/size-recommendation.tsx
+```tsx
+'use client'
+
+import { useState } from 'react'
+import { api } from '@/lib/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Icons } from '@/components/ui/icons'
+import { cn } from '@/lib/utils'
+
+interface SizeRecommendationProps {
+  productId: string
+  variants: Array<{
+    id: string
+    size?: string | null
+    inventoryQuantity: number
+  }>
+  category: string
+  brand?: string
+}
+
+export function SizeRecommendation({ 
+  productId, 
+  variants, 
+  category,
+  brand = 'Unknown'
+}: SizeRecommendationProps) {
+  const [selectedVariantId, setSelectedVariantId] = useState<string>()
+  const [showMeasurements, setShowMeasurements] = useState(false)
+  const [measurements, setMeasurements] = useState<Record<string, number>>({})
+
+  const { data, isLoading, refetch } = api.ai.getSizeRecommendation.useQuery({
+    productId,
+    variantId: selectedVariantId,
+    measurements: Object.keys(measurements).length > 0 ? measurements : undefined,
+  })
+
+  const confidenceColors = {
+    high: 'text-green-600 bg-green-50',
+    medium: 'text-yellow-600 bg-yellow-50',
+    low: 'text-red-600 bg-red-50',
+  }
+
+  const measurementFields = {
+    tops: ['chest', 'waist', 'length'],
+    bottoms: ['waist', 'hips', 'inseam'],
+    shoes: ['footLength'],
+    accessories: [],
+  }
+
+  const getCategoryType = () => {
+    const lowerCategory = category.toLowerCase()
+    if (lowerCategory.includes('shirt') || lowerCategory.includes('jacket') || lowerCategory.includes('top')) {
+      return 'tops'
+    }
+    if (lowerCategory.includes('pant') || lowerCategory.includes('skirt') || lowerCategory.includes('short')) {
+      return 'bottoms'
+    }
+    if (lowerCategory.includes('shoe') || lowerCategory.includes('boot')) {
+      return 'shoes'
+    }
+    return 'accessories'
+  }
+
+  const categoryType = getCategoryType()
+  const fields = measurementFields[categoryType as keyof typeof measurementFields]
+
+  // Filter variants with sizes
+  const sizedVariants = variants.filter(v => v.size)
+
+  if (sizedVariants.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Icons.ruler className="h-5 w-5" />
+          Find Your Size
+        </CardTitle>
+        <CardDescription>
+          AI-powered size recommendations for {brand}
+        </CardDescription>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        {/* Size Selector */}
+        <div className="space-y-2">
+          <Label>Available Sizes</Label>
+          <div className="flex flex-wrap gap-2">
+            {sizedVariants.map((variant) => (
+              <Button
+                key={variant.id}
+                variant={selectedVariantId === variant.id ? 'default' : 'outline'}
+                size="sm"
+                disabled={variant.inventoryQuantity === 0}
+                onClick={() => setSelectedVariantId(variant.id)}
+                className="relative"
+              >
+                {variant.size}
+                {variant.inventoryQuantity === 0 && (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-md bg-background/80">
+                    <Icons.x className="h-4 w-4" />
+                  </span>
+                )}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Recommendation Display */}
+        {data && (
+          <div className="space-y-4">
+            {/* Recommended Size */}
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Recommended Size</p>
+                  <p className="text-2xl font-bold">{data.recommended_size}</p>
+                </div>
+                <Badge 
+                  className={cn(
+                    'ml-2',
+                    confidenceColors[data.confidence_level as keyof typeof confidenceColors]
+                  )}
+                >
+                  {data.confidence_level} confidence
+                </Badge>
+              </div>
+              
+              {data.fit_notes && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {data.fit_notes}
+                </p>
+              )}
+            </div>
+
+            {/* Alternative Sizes */}
+            {data.alternative_sizes && data.alternative_sizes.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-2">Alternative Options</p>
+                <div className="flex gap-2">
+                  {data.alternative_sizes.map((size) => (
+                    <Badge key={size} variant="secondary">
+                      {size}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Size Comparison */}
+            {data.size_comparison && (
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-sm">
+                  <span className="font-medium">Compared to other brands:</span>{' '}
+                  {data.size_comparison}
+                </p>
+              </div>
+            )}
+
+            {/* Measurement Tips */}
+            {data.measurement_tips && (
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium mb-1">Measurement Tips:</p>
+                <p>{data.measurement_tips}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Measurements Input */}
+        {fields.length > 0 && (
+          <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full">
+                <Icons.ruler className="mr-2 h-4 w-4" />
+                Add Your Measurements
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Your Measurements</DialogTitle>
+                <DialogDescription>
+                  Enter your measurements for a more accurate size recommendation
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <Tabs defaultValue="cm">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="cm">Centimeters</TabsTrigger>
+                    <TabsTrigger value="in">Inches</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="cm" className="space-y-4">
+                    {fields.map((field) => (
+                      <div key={field} className="space-y-2">
+                        <Label htmlFor={field} className="capitalize">
+                          {field} (cm)
+                        </Label>
+                        <Input
+                          id={field}
+                          type="number"
+                          value={measurements[field] || ''}
+                          onChange={(e) => setMeasurements({
+                            ...measurements,
+                            [field]: parseFloat(e.target.value)
+                          })}
+                        />
+                      </div>
+                    ))}
+                  </TabsContent>
+                  
+                  <TabsContent value="in" className="space-y-4">
+                    {fields.map((field) => (
+                      <div key={field} className="space-y-2">
+                        <Label htmlFor={`${field}-in`} className="capitalize">
+                          {field} (inches)
+                        </Label>
+                        <Input
+                          id={`${field}-in`}
+                          type="number"
+                          value={measurements[field] ? (measurements[field] / 2.54).toFixed(1) : ''}
+                          onChange={(e) => setMeasurements({
+                            ...measurements,
+                            [field]: parseFloat(e.target.value) * 2.54
+                          })}
+                        />
+                      </div>
+                    ))}
+                  </TabsContent>
+                </Tabs>
+                
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    refetch()
+                    setShowMeasurements(false)
+                  }}
+                >
+                  Get Recommendation
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Size Guide Link */}
+        <Button variant="link" className="w-full">
+          View {brand} Size Chart
+          <Icons.externalLink className="ml-2 h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+```
+
+# src/components/features/style-quiz.tsx.bak
+```bak
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { Icons } from '@/components/ui/icons'
+import { toast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
+
+interface StyleQuizProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+const quizQuestions = [
+  {
+    id: 'style_personality',
+    question: 'Which best describes your style personality?',
+    options: [
+      { value: 'classic', label: 'Classic & Timeless', icon: Icons.crown },
+      { value: 'trendy', label: 'Trendy & Fashion-Forward', icon: Icons.sparkles },
+      { value: 'minimalist', label: 'Minimalist & Clean', icon: Icons.minimize },
+      { value: 'eclectic', label: 'Eclectic & Bold', icon: Icons.zap },
+    ],
+  },
+  {
+    id: 'color_preference',
+    question: 'What colors do you gravitate towards?',
+    options: [
+      { value: 'neutral', label: 'Neutrals (Black, White, Beige)', color: '#8B8B8B' },
+      { value: 'earth', label: 'Earth Tones (Brown, Green, Rust)', color: '#8B4513' },
+      { value: 'jewel', label: 'Jewel Tones (Emerald, Sapphire)', color: '#50C878' },
+      { value: 'pastel', label: 'Pastels (Soft Pink, Blue)', color: '#FFB6C1' },
+    ],
+  },
+  {
+    id: 'occasion',
+    question: 'What do you shop for most often?',
+    options: [
+      { value: 'work', label: 'Work & Professional', icon: Icons.briefcase },
+      { value: 'casual', label: 'Casual & Everyday', icon: Icons.coffee },
+      { value: 'evening', label: 'Evening & Special Events', icon: Icons.star },
+      { value: 'mixed', label: 'A Mix of Everything', icon: Icons.layers },
+    ],
+  },
+  {
+    id: 'fit_preference',
+    question: 'How do you prefer your clothes to fit?',
+    options: [
+      { value: 'fitted', label: 'Fitted & Tailored' },
+      { value: 'relaxed', label: 'Relaxed & Comfortable' },
+      { value: 'oversized', label: 'Oversized & Loose' },
+      { value: 'varies', label: 'It Varies by Piece' },
+    ],
+  },
+  {
+    id: 'shopping_motivation',
+    question: 'What motivates your purchases?',
+    options: [
+      { value: 'quality', label: 'Quality & Craftsmanship', icon: Icons.gem },
+      { value: 'trends', label: 'Latest Trends', icon: Icons.trendingUp },
+      { value: 'versatility', label: 'Versatility & Practicality', icon: Icons.repeat },
+      { value: 'unique', label: 'Unique & Statement Pieces', icon: Icons.star },
+    ],
+  },
+  {
+    id: 'price_range',
+    question: 'What\'s your typical budget per item?',
+    options: [
+      { value: { min: 0, max: 200 }, label: 'Under $200' },
+      { value: { min: 200, max: 500 }, label: '$200 - $500' },
+      { value: { min: 500, max: 1000 }, label: '$500 - $1,000' },
+      { value: { min: 1000, max: 10000 }, label: '$1,000+' },
+    ],
+  },
+  {
+    id: 'sustainability',
+    question: 'How important is sustainability to you?',
+    options: [
+      { value: 'very_important', label: 'Very Important', icon: Icons.leaf },
+      { value: 'important', label: 'Somewhat Important' },
+      { value: 'neutral', label: 'Neutral' },
+      { value: 'not_important', label: 'Not a Priority' },
+    ],
+  },
+  {
+    id: 'brand_preference',
+    question: 'Do you have brand preferences?',
+    options: [
+      { value: 'luxury_only', label: 'Luxury Brands Only' },
+      { value: 'mix_high_low', label: 'Mix of High & Low' },
+      { value: 'emerging', label: 'Emerging Designers' },
+      { value: 'no_preference', label: 'No Preference' },
+    ],
+  },
+]
+
+export function StyleQuiz({ open, onOpenChange }: StyleQuizProps) {
+  const router = useRouter()
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+
+  const generateProfileMutation = api.ai.generateStyleProfile.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Style profile created!',
+        description: 'Your personalized recommendations are ready.',
+      })
+      onOpenChange(false)
+      router.push('/account/style-profile')
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create style profile',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const progress = ((currentQuestion + 1) / quizQuestions.length) * 100
+  const question = quizQuestions[currentQuestion]
+  const isLastQuestion = currentQuestion === quizQuestions.length - 1
+
+  const handleAnswer = (value: any) => {
+    setAnswers({ ...answers, [question.id]: value })
+    
+    if (isLastQuestion) {
+      // Submit the quiz
+      generateProfileMutation.mutate({
+        quizAnswers: { ...answers, [question.id]: value },
+        favoriteProductIds: selectedProducts,
+      })
+    } else {
+      // Go to next question
+      setCurrentQuestion(currentQuestion + 1)
+    }
+  }
+
+  const handleBack = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Discover Your Style</DialogTitle>
+          <DialogDescription>
+            Answer a few questions to get personalized recommendations
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {
 
 ```
 
@@ -7526,6 +11868,536 @@ export function CartItemCard({
 
 ```
 
+# src/components/features/style-quiz.tsx
+```tsx
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { Icons } from '@/components/ui/icons'
+import { toast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
+
+interface StyleQuizProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+const quizQuestions = [
+  {
+    id: 'style_personality',
+    question: 'Which best describes your style personality?',
+    options: [
+      { value: 'classic', label: 'Classic & Timeless', icon: Icons.crown },
+      { value: 'trendy', label: 'Trendy & Fashion-Forward', icon: Icons.sparkles },
+      { value: 'minimalist', label: 'Minimalist & Clean', icon: Icons.minimize },
+      { value: 'eclectic', label: 'Eclectic & Bold', icon: Icons.zap },
+    ],
+  },
+  {
+    id: 'color_preference',
+    question: 'What colors do you gravitate towards?',
+    options: [
+      { value: 'neutral', label: 'Neutrals (Black, White, Beige)', color: '#8B8B8B' },
+      { value: 'earth', label: 'Earth Tones (Brown, Green, Rust)', color: '#8B4513' },
+      { value: 'jewel', label: 'Jewel Tones (Emerald, Sapphire)', color: '#50C878' },
+      { value: 'pastel', label: 'Pastels (Soft Pink, Blue)', color: '#FFB6C1' },
+    ],
+  },
+  {
+    id: 'occasion',
+    question: 'What do you shop for most often?',
+    options: [
+      { value: 'work', label: 'Work & Professional', icon: Icons.briefcase },
+      { value: 'casual', label: 'Casual & Everyday', icon: Icons.coffee },
+      { value: 'evening', label: 'Evening & Special Events', icon: Icons.star },
+      { value: 'mixed', label: 'A Mix of Everything', icon: Icons.layers },
+    ],
+  },
+  {
+    id: 'fit_preference',
+    question: 'How do you prefer your clothes to fit?',
+    options: [
+      { value: 'fitted', label: 'Fitted & Tailored' },
+      { value: 'relaxed', label: 'Relaxed & Comfortable' },
+      { value: 'oversized', label: 'Oversized & Loose' },
+      { value: 'varies', label: 'It Varies by Piece' },
+    ],
+  },
+  {
+    id: 'shopping_motivation',
+    question: 'What motivates your purchases?',
+    options: [
+      { value: 'quality', label: 'Quality & Craftsmanship', icon: Icons.gem },
+      { value: 'trends', label: 'Latest Trends', icon: Icons.trendingUp },
+      { value: 'versatility', label: 'Versatility & Practicality', icon: Icons.repeat },
+      { value: 'unique', label: 'Unique & Statement Pieces', icon: Icons.star },
+    ],
+  },
+  {
+    id: 'price_range',
+    question: 'What\'s your typical budget per item?',
+    options: [
+      { value: { min: 0, max: 200 }, label: 'Under $200' },
+      { value: { min: 200, max: 500 }, label: '$200 - $500' },
+      { value: { min: 500, max: 1000 }, label: '$500 - $1,000' },
+      { value: { min: 1000, max: 10000 }, label: '$1,000+' },
+    ],
+  },
+  {
+    id: 'sustainability',
+    question: 'How important is sustainability to you?',
+    options: [
+      { value: 'very_important', label: 'Very Important', icon: Icons.leaf },
+      { value: 'important', label: 'Somewhat Important' },
+      { value: 'neutral', label: 'Neutral' },
+      { value: 'not_important', label: 'Not a Priority' },
+    ],
+  },
+  {
+    id: 'brand_preference',
+    question: 'Do you have brand preferences?',
+    options: [
+      { value: 'luxury_only', label: 'Luxury Brands Only' },
+      { value: 'mix_high_low', label: 'Mix of High & Low' },
+      { value: 'emerging', label: 'Emerging Designers' },
+      { value: 'no_preference', label: 'No Preference' },
+    ],
+  },
+]
+
+export function StyleQuiz({ open, onOpenChange }: StyleQuizProps) {
+  const router = useRouter()
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+
+  const generateProfileMutation = api.ai.generateStyleProfile.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Style profile created!',
+        description: 'Your personalized recommendations are ready.',
+      })
+      onOpenChange(false)
+      router.push('/account/style-profile')
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create style profile',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const progress = ((currentQuestion + 1) / quizQuestions.length) * 100
+  const question = quizQuestions[currentQuestion]
+  const isLastQuestion = currentQuestion === quizQuestions.length - 1
+
+  const handleAnswer = (value: any) => {
+    setAnswers({ ...answers, [question.id]: value })
+    
+    if (isLastQuestion) {
+      // Submit the quiz
+      generateProfileMutation.mutate({
+        quizAnswers: { ...answers, [question.id]: value },
+        favoriteProductIds: selectedProducts,
+      })
+    } else {
+      // Go to next question
+      setCurrentQuestion(currentQuestion + 1)
+    }
+  }
+
+  const handleBack = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1)
+    }
+  }
+
+  const handleSkip = () => {
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Discover Your Style</DialogTitle>
+          <DialogDescription>
+            Answer a few questions to get personalized recommendations
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Progress */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Question {currentQuestion + 1} of {quizQuestions.length}</span>
+              <span>{Math.round(progress)}% complete</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+
+          {/* Question */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">{question.question}</h3>
+            
+            <RadioGroup
+              value={answers[question.id]}
+              onValueChange={handleAnswer}
+              className="space-y-3"
+            >
+              {question.options.map((option) => {
+                const Icon = option.icon
+                return (
+                  <Label
+                    key={option.value}
+                    htmlFor={option.value}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors",
+                      answers[question.id] === option.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    )}
+                  >
+                    <RadioGroupItem
+                      value={option.value}
+                      id={option.value}
+                      className="sr-only"
+                    />
+                    
+                    {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
+                    
+                    {option.color && (
+                      <div
+                        className="h-5 w-5 rounded-full border"
+                        style={{ backgroundColor: option.color }}
+                      />
+                    )}
+                    
+                    <span className="flex-1">{option.label}</span>
+                    
+                    {answers[question.id] === option.value && (
+                      <Icons.check className="h-5 w-5 text-primary" />
+                    )}
+                  </Label>
+                )
+              })}
+            </RadioGroup>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              disabled={currentQuestion === 0}
+            >
+              <Icons.chevronLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+            
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={handleSkip}
+              >
+                Skip Quiz
+              </Button>
+              
+              {isLastQuestion && (
+                <Button
+                  onClick={() => handleAnswer(answers[question.id])}
+                  disabled={!answers[question.id] || generateProfileMutation.isPending}
+                >
+                  {generateProfileMutation.isPending ? (
+                    <>
+                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Profile...
+                    </>
+                  ) : (
+                    <>
+                      Complete
+                      <Icons.check className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+```
+
+# src/components/features/ai-chat-assistant.tsx
+```tsx
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import { api } from '@/lib/api'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Icons } from '@/components/ui/icons'
+import { cn } from '@/lib/utils'
+import { useSession } from '@/hooks/use-session'
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
+interface AIChatAssistantProps {
+  className?: string
+  context?: {
+    currentPage?: string
+    productId?: string
+  }
+}
+
+export function AIChatAssistant({ className, context }: AIChatAssistantProps) {
+  const { user } = useSession()
+  const [isOpen, setIsOpen] = useState(false)
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: 'Hello! I\'m your personal style assistant. How can I help you find the perfect luxury pieces today?',
+      timestamp: new Date(),
+    },
+  ])
+  const [input, setInput] = useState('')
+  const [conversationId, setConversationId] = useState<string>()
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const chatMutation = api.ai.chat.useMutation({
+    onSuccess: (data) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date(),
+        },
+      ])
+      setConversationId(data.conversationId)
+    },
+  })
+
+  const handleSend = () => {
+    if (!input.trim() || chatMutation.isPending) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input.trim(),
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInput('')
+
+    chatMutation.mutate({
+      message: userMessage.content,
+      conversationId,
+      context,
+    })
+  }
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+    }
+  }, [messages])
+
+  // Focus input when chat opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [isOpen])
+
+  const suggestedQuestions = [
+    'What\'s trending this season?',
+    'Help me find a gift',
+    'What matches with this?',
+    'Show me sustainable options',
+  ]
+
+  return (
+    <>
+      {/* Chat Button */}
+      <Button
+        onClick={() => setIsOpen(!isOpen)}
+        size="icon"
+        className={cn(
+          'fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg',
+          isOpen && 'hidden',
+          className
+        )}
+      >
+        <Icons.messageCircle className="h-6 w-6" />
+      </Button>
+
+      {/* Chat Window */}
+      <Card
+        className={cn(
+          'fixed bottom-6 right-6 w-96 transition-all',
+          isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none',
+          className
+        )}
+        style={{ height: '600px' }}
+      >
+        <CardHeader className="flex flex-row items-center justify-between border-b">
+          <CardTitle className="flex items-center gap-2">
+            <Icons.sparkles className="h-5 w-5 text-primary" />
+            AI Style Assistant
+          </CardTitle>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setIsOpen(false)}
+          >
+            <Icons.x className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        
+        <CardContent className="flex h-full flex-col p-0" style={{ height: 'calc(100% - 73px)' }}>
+          {/* Messages */}
+          <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    'flex gap-3',
+                    message.role === 'user' && 'justify-end'
+                  )}
+                >
+                  {message.role === 'assistant' && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src="/ai-assistant-avatar.png" />
+                      <AvatarFallback>AI</AvatarFallback>
+                    </Avatar>
+                  )}
+                  
+                  <div
+                    className={cn(
+                      'max-w-[80%] rounded-lg px-4 py-2',
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    )}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <p className="mt-1 text-xs opacity-70">
+                      {message.timestamp.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  
+                  {message.role === 'user' && (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.avatarUrl || undefined} />
+                      <AvatarFallback>
+                        {user?.name?.charAt(0) || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
+                </div>
+              ))}
+              
+              {chatMutation.isPending && (
+                <div className="flex gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>AI</AvatarFallback>
+                  </Avatar>
+                  <div className="rounded-lg bg-muted px-4 py-2">
+                    <Icons.ellipsis className="h-4 w-4 animate-pulse" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Suggested Questions */}
+          {messages.length === 1 && (
+            <div className="border-t p-4">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Try asking:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedQuestions.map((question) => (
+                  <Button
+                    key={question}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setInput(question)
+                      handleSend()
+                    }}
+                  >
+                    {question}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="border-t p-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSend()
+              }}
+              className="flex gap-2"
+            >
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me anything about style..."
+                disabled={chatMutation.isPending}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!input.trim() || chatMutation.isPending}
+              >
+                <Icons.send className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+
+```
+
 # src/components/features/products/product-card.tsx
 ```tsx
 // src/components/features/products/product-card.tsx
@@ -7907,6 +12779,1052 @@ export function ProductCard({
           </div>
         </div>
       </Link>
+    </Card>
+  )
+}
+
+```
+
+# src/components/features/style-quiz.tsx.partial
+```partial
+// src/components/features/style-quiz.tsx
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { Icons } from '@/components/ui/icons'
+import { toast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
+
+interface StyleQuizProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+const quizQuestions = [
+  {
+    id: 'style_personality',
+    question: 'Which best describes your style personality?',
+    options: [
+      { value: 'classic', label: 'Classic & Timeless', icon: Icons.crown },
+      { value: 'trendy', label: 'Trendy & Fashion-Forward', icon: Icons.sparkles },
+      { value: 'minimalist', label: 'Minimalist & Clean', icon: Icons.minimize },
+      { value: 'eclectic', label: 'Eclectic & Bold', icon: Icons.zap },
+    ],
+  },
+  {
+    id: 'color_preference',
+    question: 'What colors do you gravitate towards?',
+    options: [
+      { value: 'neutral', label: 'Neutrals (Black, White, Beige)', color: '#8B8B8B' },
+      { value: 'earth', label: 'Earth Tones (Brown, Green, Rust)', color: '#8B4513' },
+      { value: 'jewel', label: 'Jewel Tones (Emerald, Sapphire)', color: '#50C878' },
+      { value: 'pastel', label: 'Pastels (Soft Pink, Blue)', color: '#FFB6C1' },
+    ],
+  },
+  {
+    id: 'occasion',
+    question: 'What do you shop for most often?',
+    options: [
+      { value: 'work', label: 'Work & Professional', icon: Icons.briefcase },
+      { value: 'casual', label: 'Casual & Everyday', icon: Icons.coffee },
+      { value: 'evening', label: 'Evening & Special Events', icon: Icons.star },
+      { value: 'mixed', label: 'A Mix of Everything', icon: Icons.layers },
+    ],
+  },
+  {
+    id: 'fit_preference',
+    question: 'How do you prefer your clothes to fit?',
+    options: [
+      { value: 'fitted', label: 'Fitted & Tailored' },
+      { value: 'relaxed', label: 'Relaxed & Comfortable' },
+      { value: 'oversized', label: 'Oversized & Loose' },
+      { value: 'varies', label: 'It Varies by Piece' },
+    ],
+  },
+  {
+    id: 'shopping_motivation',
+    question: 'What motivates your purchases?',
+    options: [
+      { value: 'quality', label: 'Quality & Craftsmanship', icon: Icons.gem },
+      { value: 'trends', label: 'Latest Trends', icon: Icons.trendingUp },
+      { value: 'versatility', label: 'Versatility & Practicality', icon: Icons.repeat },
+      { value: 'unique', label: 'Unique & Statement Pieces', icon: Icons.star },
+    ],
+  },
+  {
+    id: 'price_range',
+    question: 'What\'s your typical budget per item?',
+    options: [
+      { value: { min: 0, max: 200 }, label: 'Under $200' },
+      { value: { min: 200, max: 500 }, label: '$200 - $500' },
+      { value: { min: 500, max: 1000 }, label: '$500 - $1,000' },
+      { value: { min: 1000, max: 10000 }, label: '$1,000+' },
+    ],
+  },
+  {
+    id: 'sustainability',
+    question: 'How important is sustainability to you?',
+    options: [
+      { value: 'very_important', label: 'Very Important', icon: Icons.leaf },
+      { value: 'important', label: 'Somewhat Important' },
+      { value: 'neutral', label: 'Neutral' },
+      { value: 'not_important', label: 'Not a Priority' },
+    ],
+  },
+  {
+    id: 'brand_preference',
+    question: 'Do you have brand preferences?',
+    options: [
+      { value: 'luxury_only', label: 'Luxury Brands Only' },
+      { value: 'mix_high_low', label: 'Mix of High & Low' },
+      { value: 'emerging', label: 'Emerging Designers' },
+      { value: 'no_preference', label: 'No Preference' },
+    ],
+  },
+]
+
+export function StyleQuiz({ open, onOpenChange }: StyleQuizProps) {
+  const router = useRouter()
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+
+  const generateProfileMutation = api.ai.generateStyleProfile.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Style profile created!',
+        description: 'Your personalized recommendations are ready.',
+      })
+      onOpenChange(false)
+      router.push('/account/style-profile')
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create style profile',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const progress = ((currentQuestion + 1) / quizQuestions.length) * 100
+  const question = quizQuestions[currentQuestion]
+  const isLastQuestion = currentQuestion === quizQuestions.length - 1
+
+  const handleAnswer = (value: any) => {
+    setAnswers({ ...answers, [question.id]: value })
+    
+    if (isLastQuestion) {
+      // Submit the quiz
+      generateProfileMutation.mutate({
+        quizAnswers: { ...answers, [question.id]: value },
+        favoriteProductIds: selectedProducts,
+      })
+    } else {
+      // Go to next question
+      setCurrentQuestion(currentQuestion + 1)
+    }
+  }
+
+  const handleBack = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Discover Your Style</DialogTitle>
+          <DialogDescription>
+            Answer a few questions to get personalized recommendations
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {
+
+```
+
+# src/components/features/outfit-builder.tsx
+```tsx
+'use client'
+
+import { useState } from 'react'
+import { api } from '@/lib/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Icons } from '@/components/ui/icons'
+import { ProductCard } from '@/components/features/product-card'
+import { formatPrice } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+
+interface OutfitBuilderProps {
+  productId: string
+  productName: string
+  productImage?: string
+}
+
+export function OutfitBuilder({ productId, productName, productImage }: OutfitBuilderProps) {
+  const [occasion, setOccasion] = useState<string>()
+  const [season, setSeason] = useState<string>()
+
+  const { data, isLoading, refetch } = api.ai.generateOutfits.useQuery({
+    productId,
+    occasion,
+    season,
+  })
+
+  const occasions = [
+    { value: 'casual', label: 'Casual Day' },
+    { value: 'office', label: 'Office' },
+    { value: 'evening', label: 'Evening Out' },
+    { value: 'formal', label: 'Formal Event' },
+    { value: 'weekend', label: 'Weekend' },
+  ]
+
+  const seasons = [
+    { value: 'spring', label: 'Spring' },
+    { value: 'summer', label: 'Summer' },
+    { value: 'fall', label: 'Fall' },
+    { value: 'winter', label: 'Winter' },
+  ]
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-40" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Icons.sparkles className="h-5 w-5" />
+          Complete the Look
+        </CardTitle>
+        <CardDescription>
+          AI-curated outfit suggestions featuring {productName}
+        </CardDescription>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
+        {/* Filters */}
+        <div className="flex flex-wrap gap-4">
+          <Select value={occasion} onValueChange={setOccasion}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select occasion" />
+            </SelectTrigger>
+            <SelectContent>
+              {occasions.map((occ) => (
+                <SelectItem key={occ.value} value={occ.value}>
+                  {occ.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Select value={season} onValueChange={setSeason}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select season" />
+            </SelectTrigger>
+            <SelectContent>
+              {seasons.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+          >
+            <Icons.refresh className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Outfit Suggestions */}
+        {data?.outfits && data.outfits.length > 0 ? (
+          <Tabs defaultValue="0" className="w-full">
+            <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${data.outfits.length}, 1fr)` }}>
+              {data.outfits.map((_, index) => (
+                <TabsTrigger key={index} value={index.toString()}>
+                  Look {index + 1}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            
+            {data.outfits.map((outfit, index) => (
+              <TabsContent key={index} value={index.toString()} className="space-y-6">
+                <div>
+                  <h4 className="text-lg font-semibold">{outfit.name}</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {outfit.description}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="secondary">{outfit.occasion}</Badge>
+                    {outfit.items.length > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        {outfit.items.length + 1} pieces
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Base Product */}
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium mb-2">Starting with:</p>
+                  <div className="flex items-center gap-4">
+                    {productImage && (
+                      <img
+                        src={productImage}
+                        alt={productName}
+                        className="h-20 w-20 rounded-md object-cover"
+                      />
+                    )}
+                    <div>
+                      <p className="font-medium">{productName}</p>
+                      <p className="text-sm text-muted-foreground">Your selected item</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suggested Items */}
+                <div className="space-y-4">
+                  {outfit.items.map((item, itemIndex) => (
+                    <div key={itemIndex} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{item.category}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {item.description}
+                          </p>
+                        </div>
+                        <Badge variant="outline">
+                          {item.color_suggestion}
+                        </Badge>
+                      </div>
+                      
+                      {item.suggestedProducts && item.suggestedProducts.length > 0 && (
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          {item.suggestedProducts.slice(0, 3).map((product) => (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              className="h-full"
+                            />
+                          ))}
+                        </div>
+                      )}
+                      
+                      {item.style_notes && (
+                        <p className="text-sm text-muted-foreground italic">
+                          💡 {item.style_notes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Styling Tips */}
+                {outfit.styling_tips && (
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-6">
+                      <p className="text-sm font-medium mb-2">Styling Tips:</p>
+                      <p className="text-sm text-muted-foreground">
+                        {outfit.styling_tips}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Alternative Options */}
+                {outfit.alternative_options && (
+                  <div className="text-sm text-muted-foreground">
+                    <p className="font-medium">Alternative options:</p>
+                    <p>{outfit.alternative_options}</p>
+                  </div>
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
+        ) : (
+          <div className="text-center py-8">
+            <Icons.sparkles className="h-12 w-12 text-muted-foreground mx-auto" />
+            <p className="mt-4 text-muted-foreground">
+              Select occasion and season to see outfit suggestions
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+```
+
+# src/components/features/visual-search.tsx
+```tsx
+'use client'
+
+import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
+import { Icons } from '@/components/ui/icons'
+import { toast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
+
+interface VisualSearchProps {
+  children?: React.ReactNode
+  className?: string
+}
+
+export function VisualSearch({ children, className }: VisualSearchProps) {
+  const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+  
+  const visualSearchMutation = api.ai.visualSearch.useMutation({
+    onSuccess: (data) => {
+      // Store results in session storage
+      sessionStorage.setItem('visualSearchResults', JSON.stringify(data))
+      // Navigate to search results page
+      router.push('/search?mode=visual')
+      setOpen(false)
+    },
+    onError: (error) => {
+      toast({
+        title: 'Search failed',
+        description: error.message || 'Failed to search for similar products',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file',
+        description: 'Please upload an image file',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setPreviewUrl(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    // In a real app, upload to cloud storage first
+    // For demo, we'll use a data URL
+    const dataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.readAsDataURL(file)
+    })
+
+    setImageUrl(dataUrl)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    const file = e.dataTransfer.files[0]
+    if (file) {
+      handleFileUpload(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleSearch = () => {
+    if (!imageUrl) {
+      toast({
+        title: 'No image',
+        description: 'Please upload or provide an image URL',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    visualSearchMutation.mutate({ imageUrl })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {children || (
+          <Button variant="outline" className={className}>
+            <Icons.camera className="mr-2 h-4 w-4" />
+            Visual Search
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Visual Search</DialogTitle>
+          <DialogDescription>
+            Upload an image or provide a URL to find similar products
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Upload Area */}
+          <Card
+            className={cn(
+              'border-2 border-dashed transition-colors',
+              isDragging && 'border-primary bg-primary/5'
+            )}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
+            <CardContent className="flex flex-col items-center justify-center p-12">
+              {previewUrl ? (
+                <div className="relative">
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    className="max-h-64 rounded-lg object-contain"
+                  />
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute -right-2 -top-2"
+                    onClick={() => {
+                      setPreviewUrl('')
+                      setImageUrl('')
+                    }}
+                  >
+                    <Icons.x className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Icons.upload className="h-12 w-12 text-muted-foreground" />
+                  <p className="mt-4 text-center text-sm text-muted-foreground">
+                    Drag and drop an image here, or click to browse
+                  </p>
+                  <Button
+                    variant="secondary"
+                    className="mt-4"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Choose File
+                  </Button>
+                  <Input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        handleFileUpload(file)
+                      }
+                    }}
+                  />
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* URL Input */}
+          <div className="space-y-2">
+            <Label htmlFor="image-url">Or paste an image URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="image-url"
+                type="url"
+                placeholder="https://example.com/image.jpg"
+                value={imageUrl}
+                onChange={(e) => {
+                  setImageUrl(e.target.value)
+                  setPreviewUrl(e.target.value)
+                }}
+              />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (imageUrl && imageUrl.startsWith('http')) {
+                    setPreviewUrl(imageUrl)
+                  }
+                }}
+              >
+                Preview
+              </Button>
+            </div>
+          </div>
+
+          {/* Search Tips */}
+          <div className="rounded-lg bg-muted p-4">
+            <p className="text-sm font-medium">Tips for best results:</p>
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              <li>• Use clear, well-lit images</li>
+              <li>• Focus on a single product</li>
+              <li>• Avoid busy backgrounds</li>
+              <li>• Show the full item when possible</li>
+            </ul>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={visualSearchMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSearch}
+              disabled={!imageUrl || visualSearchMutation.isPending}
+            >
+              {visualSearchMutation.isPending ? (
+                <>
+                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Icons.search className="mr-2 h-4 w-4" />
+                  Search
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+```
+
+# src/components/features/ai-recommendations.tsx
+```tsx
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { api } from '@/lib/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Icons } from '@/components/ui/icons'
+import { ProductCard } from '@/components/features/product-card'
+import { cn } from '@/lib/utils'
+
+interface AIRecommendationsProps {
+  category?: string
+  className?: string
+  showPersonalizationScore?: boolean
+}
+
+export function AIRecommendations({ 
+  category, 
+  className,
+  showPersonalizationScore = true,
+}: AIRecommendationsProps) {
+  const [selectedCategory, setSelectedCategory] = useState(category)
+  
+  const { data, isLoading, refetch } = api.ai.getPersonalizedRecommendations.useQuery({
+    limit: 12,
+    category: selectedCategory,
+  })
+
+  const categories = [
+    { value: undefined, label: 'All Categories' },
+    { value: 'bags', label: 'Bags' },
+    { value: 'shoes', label: 'Shoes' },
+    { value: 'jewelry', label: 'Jewelry' },
+    { value: 'watches', label: 'Watches' },
+  ]
+
+  if (isLoading) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <Skeleton key={i} className="h-80" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!data || data.recommendations.length === 0) {
+    return (
+      <Card className={className}>
+        <CardContent className="flex flex-col items-center justify-center py-16">
+          <Icons.sparkles className="h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-medium">No recommendations yet</h3>
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            Complete your style profile to get personalized recommendations
+          </p>
+          <Button className="mt-6" asChild>
+            <Link href="/account/style-profile">
+              Create Style Profile
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className={cn('overflow-hidden', className)}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2">
+              <Icons.sparkles className="h-5 w-5 text-primary" />
+              AI Recommendations for You
+            </CardTitle>
+            <CardDescription>
+              {data.basedOn === 'ai_personalization' 
+                ? 'Personalized based on your unique style'
+                : 'Trending items you might like'}
+            </CardDescription>
+          </div>
+          {showPersonalizationScore && data.personalizationScore > 0 && (
+            <div className="text-right">
+              <div className="text-2xl font-bold">
+                {Math.round(data.personalizationScore * 100)}%
+              </div>
+              <p className="text-xs text-muted-foreground">Match Score</p>
+            </div>
+          )}
+        </div>
+        
+        {/* Category Filter */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {categories.map((cat) => (
+            <Button
+              key={cat.value || 'all'}
+              variant={selectedCategory === cat.value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setSelectedCategory(cat.value)
+                refetch()
+              }}
+            >
+              {cat.label}
+            </Button>
+          ))}
+        </div>
+      </CardHeader>
+      
+      <CardContent>
+        {data.styleInsights && (
+          <div className="mb-6 rounded-lg bg-muted p-4">
+            <p className="text-sm font-medium mb-1">Your Style Insights</p>
+            <p className="text-sm text-muted-foreground">{data.styleInsights}</p>
+          </div>
+        )}
+        
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {data.recommendations.map((product) => (
+            <div key={product.id} className="relative">
+              <ProductCard product={product} />
+              {product.recommendationReason && (
+                <div className="absolute -top-2 -right-2 z-10">
+                  <div className="group relative">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Icons.info className="h-4 w-4" />
+                    </div>
+                    <div className="absolute right-0 top-10 hidden w-64 rounded-md bg-popover p-3 text-sm shadow-lg group-hover:block">
+                      <p className="font-medium mb-1">Why we recommend this</p>
+                      <p className="text-muted-foreground">
+                        {product.recommendationReason}
+                      </p>
+                      {product.matchScore && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-2 flex-1 rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{ width: `${product.matchScore * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium">
+                            {Math.round(product.matchScore * 100)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {product.isExclusive && (
+                <Badge className="absolute top-2 left-2" variant="secondary">
+                  Exclusive
+                </Badge>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        {data.trendAlignment && (
+          <div className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Icons.trendingUp className="h-4 w-4" />
+            <span>{data.trendAlignment}</span>
+          </div>
+        )}
+        
+        <div className="mt-8 flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            className="gap-2"
+          >
+            <Icons.refresh className="h-4 w-4" />
+            Refresh Recommendations
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+```
+
+# src/components/features/trend-insights.tsx
+```tsx
+'use client'
+
+import { api } from '@/lib/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Icons } from '@/components/ui/icons'
+import { ProductCard } from '@/components/features/product-card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+
+interface TrendInsightsProps {
+  categories?: string[]
+  className?: string
+}
+
+export function TrendInsights({ categories, className }: TrendInsightsProps) {
+  const { data, isLoading } = api.ai.getTrendAnalysis.useQuery({
+    categories,
+  })
+
+  if (isLoading) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-32" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!data) {
+    return null
+  }
+
+  return (
+    <Card className={cn('overflow-hidden', className)}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Icons.trendingUp className="h-5 w-5" />
+              Trend Insights
+            </CardTitle>
+            <CardDescription>
+              AI-curated fashion trends and investment pieces
+            </CardDescription>
+          </div>
+          {data.lastUpdated && (
+            <p className="text-xs text-muted-foreground">
+              Updated {new Date(data.lastUpdated).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      </CardHeader>
+      
+      <CardContent>
+        <Tabs defaultValue="trending" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="trending">Trending Now</TabsTrigger>
+            <TabsTrigger value="emerging">Emerging</TabsTrigger>
+            <TabsTrigger value="timeless">Timeless</TabsTrigger>
+          </TabsList>
+          
+          {/* Trending Now */}
+          <TabsContent value="trending" className="space-y-6">
+            {data.trending_now.map((trend, index) => (
+              <div key={index} className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-semibold">{trend.trend}</h4>
+                    <Badge variant={trend.longevity === 'long-term' ? 'default' : 'secondary'}>
+                      {trend.longevity}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {trend.description}
+                  </p>
+                  
+                  {/* Key Pieces */}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-sm font-medium">Key pieces:</span>
+                    {trend.key_pieces.map((piece) => (
+                      <Badge key={piece} variant="outline">
+                        {piece}
+                      </Badge>
+                    ))}
+                  </div>
+                  
+                  {/* Leading Brands */}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-sm font-medium">Leading brands:</span>
+                    {trend.brands_leading.map((brand) => (
+                      <Badge key={brand} variant="secondary">
+                        {brand}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Product Carousel */}
+                {trend.products && trend.products.length > 0 && (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {trend.products.slice(0, 4).map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </TabsContent>
+          
+          {/* Emerging Trends */}
+          <TabsContent value="emerging" className="space-y-4">
+            <div className="rounded-lg bg-muted p-4">
+              <p className="text-sm font-medium mb-2">
+                <Icons.eye className="inline h-4 w-4 mr-1" />
+                Keep an eye on these upcoming trends:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {data.emerging_trends.map((trend) => (
+                  <Badge key={trend} variant="outline">
+                    {trend}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+            
+            {data.personalized_recommendations && (
+              <div className="space-y-2">
+                <h4 className="font-medium">For Your Style</h4>
+                <p className="text-sm text-muted-foreground">
+                  {data.personalized_recommendations}
+                </p>
+              </div>
+            )}
+          </TabsContent>
+          
+          {/* Timeless Pieces */}
+          <TabsContent value="timeless" className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Classic pieces that never go out of style:
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {data.timeless_pieces.map((piece) => (
+                <div
+                  key={piece}
+                  className="flex items-center gap-2 rounded-lg border p-3"
+                >
+                  <Icons.checkCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium">{piece}</span>
+                </div>
+              ))}
+            </div>
+            
+            {/* Investment Pieces */}
+            {data.investment_pieces.length > 0 && (
+              <div className="mt-6">
+                <h4 className="font-medium mb-2">Worth the Investment</h4>
+                <div className="space-y-2">
+                  {data.investment_pieces.map((piece) => (
+                    <div key={piece} className="flex items-center gap-2">
+                      <Icons.gem className="h-4 w-4 text-primary" />
+                      <span className="text-sm">{piece}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </CardContent>
     </Card>
   )
 }
@@ -11093,6 +17011,2646 @@ export default function RootLayout({
       </body>
     </html>
   )
+}
+
+```
+
+# src/app/account/addresses/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Icons } from '@/components/ui/icons'
+import { AddAddressDialog } from '@/components/features/add-address-dialog'
+import { EditAddressDialog } from '@/components/features/edit-address-dialog'
+import { DeleteAddressDialog } from '@/components/features/delete-address-dialog'
+
+async function getAddresses(userId: string) {
+  return await prisma.address.findMany({
+    where: { userId },
+    orderBy: [
+      { isDefault: 'desc' },
+      { createdAt: 'desc' },
+    ],
+  })
+}
+
+export default async function AddressesPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/addresses')
+  }
+
+  const addresses = await getAddresses(session.user.id)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Addresses</h1>
+          <p className="text-muted-foreground">
+            Manage your shipping and billing addresses
+          </p>
+        </div>
+        <AddAddressDialog />
+      </div>
+
+      {addresses.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.mapPin className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">No addresses saved</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Add an address to speed up checkout
+            </p>
+            <AddAddressDialog>
+              <Button className="mt-6">
+                <Icons.plus className="mr-2 h-4 w-4" />
+                Add Address
+              </Button>
+            </AddAddressDialog>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {addresses.map((address) => (
+            <Card key={address.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base">
+                      {address.firstName} {address.lastName}
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="capitalize">
+                        {address.type}
+                      </Badge>
+                      {address.isDefault && (
+                        <Badge variant="default">Default</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <EditAddressDialog address={address} />
+                    <DeleteAddressDialog
+                      addressId={address.id}
+                      isDefault={address.isDefault}
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <address className="text-sm not-italic text-muted-foreground">
+                  {address.company && <div>{address.company}</div>}
+                  <div>{address.addressLine1}</div>
+                  {address.addressLine2 && <div>{address.addressLine2}</div>}
+                  <div>
+                    {address.city}, {address.stateProvince} {address.postalCode}
+                  </div>
+                  <div>{address.countryCode}</div>
+                  {address.phone && (
+                    <div className="mt-2">
+                      <Icons.phone className="mr-1 inline h-3 w-3" />
+                      {address.phone}
+                    </div>
+                  )}
+                </address>
+                {!address.isDefault && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={async () => {
+                      'use server'
+                      await prisma.address.updateMany({
+                        where: { userId: session.user.id },
+                        data: { isDefault: false },
+                      })
+                      await prisma.address.update({
+                        where: { id: address.id },
+                        data: { isDefault: true },
+                      })
+                    }}
+                  >
+                    Set as Default
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+```
+
+# src/app/account/orders/page.tsx
+```tsx
+import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Icons } from '@/components/ui/icons'
+import { formatPrice, formatDate } from '@/lib/utils'
+import { OrdersListSkeleton } from '@/components/skeletons/orders-skeleton'
+
+// Status badge color mapping
+const statusColors = {
+  PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
+  PAYMENT_PROCESSING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
+  PAYMENT_FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+  CONFIRMED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400',
+  PROCESSING: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
+  SHIPPED: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-400',
+  DELIVERED: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+  CANCELLED: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
+  REFUNDED: 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400',
+  RETURNED: 'bg-pink-100 text-pink-800 dark:bg-pink-900/20 dark:text-pink-400',
+} as const
+
+async function getOrders(userId: string, status?: string, search?: string) {
+  const where = {
+    userId,
+    ...(status && status !== 'all' && { status }),
+    ...(search && {
+      OR: [
+        { orderNumber: { contains: search, mode: 'insensitive' as const } },
+        { items: { some: { productName: { contains: search, mode: 'insensitive' as const } } } },
+      ],
+    }),
+  }
+
+  const orders = await prisma.order.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      },
+      statusHistory: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  })
+
+  return orders
+}
+
+interface OrdersPageProps {
+  searchParams?: {
+    status?: string
+    search?: string
+  }
+}
+
+export default async function OrdersPage({ searchParams }: OrdersPageProps) {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/orders')
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Order History</h1>
+        <p className="text-muted-foreground">
+          View and manage your orders
+        </p>
+      </div>
+
+      <Suspense fallback={<OrdersListSkeleton />}>
+        <OrdersList
+          userId={session.user.id}
+          status={searchParams?.status}
+          search={searchParams?.search}
+        />
+      </Suspense>
+    </div>
+  )
+}
+
+async function OrdersList({
+  userId,
+  status,
+  search,
+}: {
+  userId: string
+  status?: string
+  search?: string
+}) {
+  const orders = await getOrders(userId, status, search)
+
+  return (
+    <>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs defaultValue={status || 'all'} className="w-full sm:w-auto">
+          <TabsList className="grid w-full grid-cols-4 sm:w-auto">
+            <TabsTrigger value="all" asChild>
+              <Link href="/account/orders">All</Link>
+            </TabsTrigger>
+            <TabsTrigger value="PROCESSING" asChild>
+              <Link href="/account/orders?status=PROCESSING">Active</Link>
+            </TabsTrigger>
+            <TabsTrigger value="DELIVERED" asChild>
+              <Link href="/account/orders?status=DELIVERED">Delivered</Link>
+            </TabsTrigger>
+            <TabsTrigger value="CANCELLED" asChild>
+              <Link href="/account/orders?status=CANCELLED">Cancelled</Link>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <form method="get" action="/account/orders" className="flex gap-2">
+          <Input
+            type="search"
+            name="search"
+            placeholder="Search orders..."
+            defaultValue={search}
+            className="w-full sm:w-64"
+          />
+          {status && <input type="hidden" name="status" value={status} />}
+          <Button type="submit" size="icon" variant="secondary">
+            <Icons.search className="h-4 w-4" />
+          </Button>
+        </form>
+      </div>
+
+      {orders.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.package className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">No orders found</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              {search
+                ? 'Try adjusting your search terms'
+                : status && status !== 'all'
+                ? 'No orders with this status'
+                : 'When you place an order, it will appear here'}
+            </p>
+            <Button className="mt-6" asChild>
+              <Link href="/products">Start Shopping</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <Card key={order.id}>
+              <CardHeader>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">
+                        Order #{order.orderNumber}
+                      </CardTitle>
+                      <Badge variant="secondary" className={cn('border-0', statusColors[order.status])}>
+                        {order.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <CardDescription>
+                      Placed on {formatDate(order.createdAt)}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {order.trackingNumber && order.status === 'SHIPPED' && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={`https://track.example.com/${order.trackingNumber}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Icons.truck className="mr-2 h-4 w-4" />
+                          Track Package
+                        </a>
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/account/orders/${order.id}`}>
+                        View Details
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Order Items Preview */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex -space-x-2">
+                      {order.items.slice(0, 4).map((item, idx) => (
+                        <div
+                          key={item.id}
+                          className="relative h-16 w-16 overflow-hidden rounded-md border bg-background"
+                          style={{ zIndex: 4 - idx }}
+                        >
+                          {item.product.media[0] ? (
+                            <img
+                              src={item.product.media[0].thumbnailUrl || item.product.media[0].url}
+                              alt={item.productName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-muted">
+                              <Icons.package className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {order.items.length > 4 && (
+                        <div className="relative flex h-16 w-16 items-center justify-center rounded-md border bg-muted text-sm font-medium">
+                          +{order.items.length - 4}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-muted-foreground">
+                        {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                      </p>
+                      <p className="text-sm">
+                        {order.items.slice(0, 2).map(item => item.productName).join(', ')}
+                        {order.items.length > 2 && `, and ${order.items.length - 2} more`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Order Info */}
+                  <div className="flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="grid grid-cols-2 gap-4 text-sm sm:flex sm:gap-6">
+                      <div>
+                        <p className="text-muted-foreground">Total</p>
+                        <p className="font-medium">{formatPrice(order.total)}</p>
+                      </div>
+                      {order.shippingMethod && (
+                        <div>
+                          <p className="text-muted-foreground">Shipping</p>
+                          <p className="font-medium">{order.shippingMethod}</p>
+                        </div>
+                      )}
+                      {order.estimatedDelivery && (
+                        <div>
+                          <p className="text-muted-foreground">Est. Delivery</p>
+                          <p className="font-medium">{formatDate(order.estimatedDelivery)}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Order Actions */}
+                    <div className="flex gap-2">
+                      {order.status === 'DELIVERED' && (
+                        <>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/account/orders/${order.id}/invoice`}>
+                              <Icons.download className="mr-2 h-4 w-4" />
+                              Invoice
+                            </Link>
+                          </Button>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/account/orders/${order.id}/return`}>
+                              Return
+                            </Link>
+                          </Button>
+                        </>
+                      )}
+                      {(order.status === 'PENDING' || order.status === 'CONFIRMED') && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/account/orders/${order.id}/cancel`}>
+                            Cancel Order
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+```
+
+# src/app/account/orders/[orderId]/page.tsx
+```tsx
+import { notFound, redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { Icons } from '@/components/ui/icons'
+import { formatPrice, formatDate, cn } from '@/lib/utils'
+
+async function getOrder(orderId: string, userId: string) {
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      userId,
+    },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+              brand: true,
+            },
+          },
+          variant: true,
+        },
+      },
+      statusHistory: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          creator: {
+            select: {
+              name: true,
+              role: true,
+            },
+          },
+        },
+      },
+      paymentTransactions: {
+        orderBy: { createdAt: 'desc' },
+      },
+      couponUses: {
+        include: {
+          coupon: true,
+        },
+      },
+    },
+  })
+
+  return order
+}
+
+interface OrderDetailPageProps {
+  params: {
+    orderId: string
+  }
+}
+
+export default async function OrderDetailPage({ params }: OrderDetailPageProps) {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect(`/login?callbackUrl=/account/orders/${params.orderId}`)
+  }
+
+  const order = await getOrder(params.orderId, session.user.id)
+
+  if (!order) {
+    notFound()
+  }
+
+  const statusColors = {
+    PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
+    PAYMENT_PROCESSING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
+    PAYMENT_FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+    CONFIRMED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400',
+    PROCESSING: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
+    SHIPPED: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-400',
+    DELIVERED: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+    CANCELLED: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
+    REFUNDED: 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400',
+    RETURNED: 'bg-pink-100 text-pink-800 dark:bg-pink-900/20 dark:text-pink-400',
+  } as const
+
+  const shippingAddress = order.shippingAddress as any
+  const billingAddress = order.billingAddress as any
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Link href="/account" className="hover:text-foreground">
+              Account
+            </Link>
+            <Icons.chevronRight className="h-4 w-4" />
+            <Link href="/account/orders" className="hover:text-foreground">
+              Orders
+            </Link>
+            <Icons.chevronRight className="h-4 w-4" />
+            <span>#{order.orderNumber}</span>
+          </div>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+            Order #{order.orderNumber}
+          </h1>
+          <p className="text-muted-foreground">
+            Placed on {formatDate(order.createdAt)}
+          </p>
+        </div>
+        <Badge variant="secondary" className={cn('border-0', statusColors[order.status])}>
+          {order.status.replace(/_/g, ' ')}
+        </Badge>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Order Items */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Items</CardTitle>
+              <CardDescription>
+                {order.items.length} {order.items.length === 1 ? 'item' : 'items'} in this order
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {order.items.map((item) => (
+                  <div key={item.id} className="flex gap-4">
+                    <div className="h-20 w-20 overflow-hidden rounded-md bg-muted">
+                      {item.product.media[0] ? (
+                        <img
+                          src={item.product.media[0].thumbnailUrl || item.product.media[0].url}
+                          alt={item.productName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Icons.package className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <Link
+                            href={`/products/${item.product.slug}`}
+                            className="font-medium hover:underline"
+                          >
+                            {item.productName}
+                          </Link>
+                          {item.product.brand && (
+                            <p className="text-sm text-muted-foreground">
+                              by {item.product.brand.name}
+                            </p>
+                          )}
+                          {item.variantTitle && (
+                            <p className="text-sm text-muted-foreground">
+                              {item.variantTitle}
+                            </p>
+                          )}
+                        </div>
+                        <p className="font-medium">
+                          {formatPrice(item.totalPrice)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>SKU: {item.sku}</span>
+                        <span>Qty: {item.quantity}</span>
+                        <span>{formatPrice(item.unitPrice)} each</span>
+                      </div>
+                      {item.personalization && (
+                        <div className="mt-2 rounded-md bg-muted p-2 text-sm">
+                          <p className="font-medium">Personalization:</p>
+                          <pre className="whitespace-pre-wrap">
+                            {JSON.stringify(item.personalization, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Order Timeline */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Timeline</CardTitle>
+              <CardDescription>
+                Track the progress of your order
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {order.statusHistory.map((history, index) => (
+                  <div key={history.id} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-full',
+                          index === 0
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        <Icons.check className="h-4 w-4" />
+                      </div>
+                      {index < order.statusHistory.length - 1 && (
+                        <div className="mt-2 h-full w-px bg-border" />
+                      )}
+                    </div>
+                    <div className="flex-1 pb-8">
+                      <p className="font-medium">
+                        {history.status.replace(/_/g, ' ')}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(history.createdAt, true)}
+                      </p>
+                      {history.notes && (
+                        <p className="mt-1 text-sm">{history.notes}</p>
+                      )}
+                      {history.creator && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          by {history.creator.name} ({history.creator.role})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          {/* Order Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Order Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span>{formatPrice(order.subtotal)}</span>
+                </div>
+                {order.discountAmount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span className="text-green-600">
+                      -{formatPrice(order.discountAmount)}
+                    </span>
+                  </div>
+                )}
+                {order.couponUses.length > 0 && (
+                  <div className="space-y-1">
+                    {order.couponUses.map((couponUse) => (
+                      <div key={couponUse.id} className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Coupon ({couponUse.coupon.code})
+                        </span>
+                        <span className="text-green-600">
+                          -{formatPrice(couponUse.discountAmount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Shipping</span>
+                  <span>
+                    {order.shippingAmount > 0
+                      ? formatPrice(order.shippingAmount)
+                      : 'Free'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tax</span>
+                  <span>{formatPrice(order.taxAmount)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between font-medium">
+                  <span>Total</span>
+                  <span>{formatPrice(order.total)}</span>
+                </div>
+              </div>
+
+              {/* Payment Information */}
+              <Separator />
+              <div className="space-y-2">
+                <p className="font-medium">Payment Information</p>
+                {order.paymentTransactions.map((transaction) => (
+                  <div key={transaction.id} className="text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {transaction.type}
+                      </span>
+                      <Badge
+                        variant={
+                          transaction.status === 'COMPLETED'
+                            ? 'default'
+                            : transaction.status === 'FAILED'
+                            ? 'destructive'
+                            : 'secondary'
+                        }
+                      >
+                        {transaction.status}
+                      </Badge>
+                    </div>
+                    {transaction.processedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(transaction.processedAt, true)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Shipping Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Shipping Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm font-medium">Delivery Address</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {shippingAddress.firstName} {shippingAddress.lastName}
+                  {shippingAddress.company && (
+                    <><br />{shippingAddress.company}</>
+                  )}
+                  <br />
+                  {shippingAddress.addressLine1}
+                  {shippingAddress.addressLine2 && (
+                    <><br />{shippingAddress.addressLine2}</>
+                  )}
+                  <br />
+                  {shippingAddress.city}, {shippingAddress.stateProvince} {shippingAddress.postalCode}
+                  <br />
+                  {shippingAddress.countryCode}
+                </p>
+              </div>
+
+              {order.shippingMethod && (
+                <div>
+                  <p className="text-sm font-medium">Shipping Method</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {order.shippingMethod}
+                  </p>
+                </div>
+              )}
+
+              {order.trackingNumber && (
+                <div>
+                  <p className="text-sm font-medium">Tracking Number</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {order.trackingNumber}
+                  </p>
+                  {order.shippingCarrier && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="mt-1 h-auto p-0"
+                      asChild
+                    >
+                      <a
+                        href={`https://track.example.com/${order.trackingNumber}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Track with {order.shippingCarrier}
+                        <Icons.externalLink className="ml-1 h-3 w-3" />
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Order Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {order.status === 'DELIVERED' && (
+                <>
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href={`/account/orders/${order.id}/invoice`}>
+                      <Icons.download className="mr-2 h-4 w-4" />
+                      Download Invoice
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href={`/account/orders/${order.id}/return`}>
+                      <Icons.arrowLeft className="mr-2 h-4 w-4" />
+                      Return Items
+                    </Link>
+                  </Button>
+                </>
+              )}
+              {(order.status === 'PENDING' || order.status === 'CONFIRMED') && (
+                <Button variant="outline" className="w-full" asChild>
+                  <Link href={`/account/orders/${order.id}/cancel`}>
+                    <Icons.x className="mr-2 h-4 w-4" />
+                    Cancel Order
+                  </Link>
+                </Button>
+              )}
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/support">
+                  <Icons.helpCircle className="mr-2 h-4 w-4" />
+                  Get Help
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+
+# src/app/account/payment-methods/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Icons } from '@/components/ui/icons'
+import { formatDate } from '@/lib/utils'
+import { AddPaymentMethodDialog } from '@/components/features/add-payment-method-dialog'
+import { DeletePaymentMethodDialog } from '@/components/features/delete-payment-method-dialog'
+
+async function getPaymentMethods(userId: string) {
+  return await prisma.paymentMethod.findMany({
+    where: { userId },
+    include: {
+      billingAddress: true,
+    },
+    orderBy: [
+      { isDefault: 'desc' },
+      { createdAt: 'desc' },
+    ],
+  })
+}
+
+const cardBrandIcons = {
+  visa: Icons.visa,
+  mastercard: Icons.mastercard,
+  amex: Icons.amex,
+  discover: Icons.discover,
+  diners: Icons.diners,
+  jcb: Icons.jcb,
+  unionpay: Icons.unionpay,
+} as const
+
+export default async function PaymentMethodsPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/payment-methods')
+  }
+
+  const paymentMethods = await getPaymentMethods(session.user.id)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Payment Methods</h1>
+          <p className="text-muted-foreground">
+            Manage your saved payment methods
+          </p>
+        </div>
+        <AddPaymentMethodDialog />
+      </div>
+
+      {paymentMethods.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.creditCard className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">No payment methods saved</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Add a payment method for faster checkout
+            </p>
+            <AddPaymentMethodDialog>
+              <Button className="mt-6">
+                <Icons.plus className="mr-2 h-4 w-4" />
+                Add Payment Method
+              </Button>
+            </AddPaymentMethodDialog>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {paymentMethods.map((method) => {
+            const BrandIcon = method.cardBrand
+              ? cardBrandIcons[method.cardBrand.toLowerCase() as keyof typeof cardBrandIcons]
+              : Icons.creditCard
+
+            return (
+              <Card key={method.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
+                        <BrandIcon className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <CardTitle className="text-base">
+                          {method.cardBrand} •••• {method.cardLast4}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          {method.isDefault && (
+                            <Badge variant="default">Default</Badge>
+                          )}
+                          <Badge variant="secondary">
+                            {method.type}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <DeletePaymentMethodDialog
+                      paymentMethodId={method.id}
+                      isDefault={method.isDefault}
+                      last4={method.cardLast4 || ''}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Expires</p>
+                      <p className="font-medium">
+                        {method.cardExpMonth?.toString().padStart(2, '0')}/{method.cardExpYear}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Added</p>
+                      <p className="font-medium">
+                        {formatDate(method.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {method.billingAddress && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Billing Address</p>
+                      <address className="mt-1 text-sm not-italic">
+                        <div>
+                          {method.billingAddress.firstName} {method.billingAddress.lastName}
+                        </div>
+                        <div>{method.billingAddress.addressLine1}</div>
+                        {method.billingAddress.addressLine2 && (
+                          <div>{method.billingAddress.addressLine2}</div>
+                        )}
+                        <div>
+                          {method.billingAddress.city}, {method.billingAddress.stateProvince}{' '}
+                          {method.billingAddress.postalCode}
+                        </div>
+                      </address>
+                    </div>
+                  )}
+
+                  {!method.isDefault && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={async () => {
+                        'use server'
+                        await prisma.paymentMethod.updateMany({
+                          where: { userId: session.user.id },
+                          data: { isDefault: false },
+                        })
+                        await prisma.paymentMethod.update({
+                          where: { id: method.id },
+                          data: { isDefault: true },
+                        })
+                      }}
+                    >
+                      Set as Default
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Security Notice */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Icons.shield className="h-4 w-4" />
+            Your Payment Security
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Your payment information is encrypted and securely stored. We never store your full card
+            number and use industry-standard security measures to protect your data.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+```
+
+# src/app/account/reviews/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Icons } from '@/components/ui/icons'
+import { formatDate } from '@/lib/utils'
+import { EditReviewDialog } from '@/components/features/edit-review-dialog'
+import { DeleteReviewDialog } from '@/components/features/delete-review-dialog'
+
+async function getUserReviews(userId: string) {
+  return await prisma.review.findMany({
+    where: { userId },
+    include: {
+      product: {
+        include: {
+          media: {
+            where: { isPrimary: true },
+            take: 1,
+          },
+        },
+      },
+      orderItem: {
+        include: {
+          order: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+async function getPendingReviews(userId: string) {
+  // Get delivered orders with unreviewed items
+  const deliveredOrders = await prisma.order.findMany({
+    where: {
+      userId,
+      status: 'DELIVERED',
+      deliveredAt: {
+        gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // Last 90 days
+      },
+    },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+            },
+          },
+          reviews: true,
+        },
+      },
+    },
+  })
+
+  // Filter items without reviews
+  const pendingItems = deliveredOrders.flatMap(order =>
+    order.items
+      .filter(item => item.reviews.length === 0)
+      .map(item => ({
+        ...item,
+        order,
+      }))
+  )
+
+  return pendingItems
+}
+
+export default async function ReviewsPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/reviews')
+  }
+
+  const [reviews, pendingReviews] = await Promise.all([
+    getUserReviews(session.user.id),
+    getPendingReviews(session.user.id),
+  ])
+
+  const statusColors = {
+    PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
+    APPROVED: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+    REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+    FLAGGED: 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400',
+  } as const
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">My Reviews</h1>
+        <p className="text-muted-foreground">
+          Share your experiences with products you've purchased
+        </p>
+      </div>
+
+      {/* Pending Reviews */}
+      {pendingReviews.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Awaiting Your Review</CardTitle>
+            <CardDescription>
+              Help others by reviewing your recent purchases
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingReviews.slice(0, 3).map((item) => (
+                <div key={item.id} className="flex items-center gap-4">
+                  <div className="h-16 w-16 overflow-hidden rounded-md bg-muted">
+                    {item.product.media[0] ? (
+                      <img
+                        src={item.product.media[0].thumbnailUrl || item.product.media[0].url}
+                        alt={item.productName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Icons.package className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium line-clamp-1">{item.productName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Delivered {formatDate(item.order.deliveredAt!)}
+                    </p>
+                  </div>
+                  <Button size="sm" asChild>
+                    <Link href={`/products/${item.product.slug}#write-review`}>
+                      Write Review
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+              {pendingReviews.length > 3 && (
+                <p className="text-center text-sm text-muted-foreground">
+                  And {pendingReviews.length - 3} more items awaiting review
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* User's Reviews */}
+      {reviews.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.star className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">No reviews yet</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Once you review products, they'll appear here
+            </p>
+            {pendingReviews.length === 0 && (
+              <Button className="mt-6" asChild>
+                <Link href="/account/orders">View Orders</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {reviews.map((review) => (
+            <Card key={review.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex gap-4">
+                    <div className="h-16 w-16 overflow-hidden rounded-md bg-muted">
+                      {review.product.media[0] ? (
+                        <img
+                          src={review.product.media[0].thumbnailUrl || review.product.media[0].url}
+                          alt={review.product.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Icons.package className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Link
+                        href={`/products/${review.product.slug}`}
+                        className="font-medium hover:underline"
+                      >
+                        {review.product.name}
+                      </Link>
+                      <div className="flex items-center gap-2">
+                        <div className="flex">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Icons.star
+                              key={i}
+                              className={cn(
+                                'h-4 w-4',
+                                i < review.rating
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-muted-foreground'
+                              )}
+                            />
+                          ))}
+                        </div>
+                        <Badge variant="secondary" className={cn('border-0', statusColors[review.status])}>
+                          {review.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <EditReviewDialog review={review} />
+                    <DeleteReviewDialog reviewId={review.id} />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {review.title && (
+                  <h4 className="font-medium">{review.title}</h4>
+                )}
+                {review.content && (
+                  <p className="text-sm text-muted-foreground">{review.content}</p>
+                )}
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span>{formatDate(review.createdAt)}</span>
+                  {review.isVerifiedPurchase && (
+                    <div className="flex items-center gap-1">
+                      <Icons.checkCircle className="h-3 w-3" />
+                      <span>Verified Purchase</span>
+                    </div>
+                  )}
+                  {review.helpfulCount > 0 && (
+                    <span>{review.helpfulCount} found helpful</span>
+                  )}
+                </div>
+                {review.mediaUrls.length > 0 && (
+                  <div className="flex gap-2">
+                    {review.mediaUrls.map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="h-20 w-20 overflow-hidden rounded-md bg-muted"
+                      >
+                        <img
+                          src={url}
+                          alt={`Review image ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+```
+
+# src/app/account/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Icons } from '@/components/ui/icons'
+import { formatPrice, formatDate } from '@/lib/utils'
+
+async function getUserDashboardData(userId: string) {
+  // Parallel queries for better performance
+  const [
+    orderStats,
+    wishlistCount,
+    addressCount,
+    paymentMethodCount,
+    recentOrders,
+    recentlyViewed,
+    loyaltyPoints,
+  ] = await Promise.all([
+    // Order statistics
+    prisma.order.aggregate({
+      where: { userId },
+      _count: true,
+      _sum: { total: true },
+      _avg: { total: true },
+    }),
+    
+    // Wishlist count
+    prisma.wishlistItem.count({
+      where: { wishlist: { userId } },
+    }),
+    
+    // Address count
+    prisma.address.count({
+      where: { userId },
+    }),
+    
+    // Payment method count
+    prisma.paymentMethod.count({
+      where: { userId },
+    }),
+    
+    // Recent orders
+    prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                media: {
+                  where: { isPrimary: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    
+    // Recently viewed products
+    prisma.productView.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 6,
+      distinct: ['productId'],
+      include: {
+        product: {
+          include: {
+            media: {
+              where: { isPrimary: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    }),
+    
+    // Loyalty points
+    prisma.loyaltyPoint.aggregate({
+      where: { 
+        userId,
+        expiresAt: { gte: new Date() },
+      },
+      _sum: { points: true },
+    }),
+  ])
+
+  // Calculate current month's orders
+  const currentMonth = new Date()
+  currentMonth.setDate(1)
+  currentMonth.setHours(0, 0, 0, 0)
+  
+  const ordersThisMonth = await prisma.order.count({
+    where: {
+      userId,
+      createdAt: { gte: currentMonth },
+    },
+  })
+
+  return {
+    totalOrders: orderStats._count,
+    totalSpent: orderStats._sum.total || 0,
+    averageOrderValue: orderStats._avg.total || 0,
+    ordersThisMonth,
+    wishlistCount,
+    addressCount,
+    paymentMethodCount,
+    recentOrders,
+    recentlyViewed,
+    loyaltyPoints: loyaltyPoints._sum.points || 0,
+  }
+}
+
+export default async function AccountDashboardPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account')
+  }
+
+  const dashboardData = await getUserDashboardData(session.user.id)
+
+  return (
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Welcome back, {session.user.name}
+        </h1>
+        <p className="text-muted-foreground">
+          Here's an overview of your account activity
+        </p>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <Icons.package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardData.totalOrders}</div>
+            <p className="text-xs text-muted-foreground">
+              {dashboardData.ordersThisMonth > 0 && (
+                <>+{dashboardData.ordersThisMonth} this month</>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+            <Icons.dollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatPrice(dashboardData.totalSpent)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Avg: {formatPrice(dashboardData.averageOrderValue)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Loyalty Points</CardTitle>
+            <Icons.gem className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardData.loyaltyPoints.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              {session.user.membershipTier} tier benefits
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Wishlist Items</CardTitle>
+            <Icons.heart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardData.wishlistCount}</div>
+            <p className="text-xs text-muted-foreground">
+              Ready to purchase
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Membership Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Membership Status</CardTitle>
+          <CardDescription>
+            Your current membership tier and benefits
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium leading-none">
+                {session.user.membershipTier} Member
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {session.user.membershipExpiresAt
+                  ? `Expires ${formatDate(session.user.membershipExpiresAt)}`
+                  : 'Lifetime membership'}
+              </p>
+            </div>
+            <Badge variant="secondary" className="capitalize">
+              {session.user.membershipTier}
+            </Badge>
+          </div>
+          <Progress value={65} className="h-2" />
+          <p className="text-sm text-muted-foreground">
+            Spend {formatPrice(5000)} more to reach Diamond tier
+          </p>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* Recent Orders */}
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent Orders</CardTitle>
+                <CardDescription>
+                  Your latest purchases
+                </CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/account/orders">
+                  View all
+                  <Icons.arrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {dashboardData.recentOrders.length === 0 ? (
+              <div className="flex h-32 items-center justify-center text-center">
+                <div>
+                  <Icons.package className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No orders yet</p>
+                  <Button className="mt-4" size="sm" asChild>
+                    <Link href="/products">Start Shopping</Link>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {dashboardData.recentOrders.map((order) => (
+                  <div key={order.id} className="flex items-center space-x-4">
+                    <div className="flex -space-x-2">
+                      {order.items.slice(0, 3).map((item, idx) => (
+                        <div
+                          key={item.id}
+                          className="relative h-10 w-10 overflow-hidden rounded-full border-2 border-background"
+                          style={{ zIndex: 3 - idx }}
+                        >
+                          {item.product.media[0] ? (
+                            <img
+                              src={item.product.media[0].thumbnailUrl || item.product.media[0].url}
+                              alt={item.productName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-muted">
+                              <Icons.package className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {order.items.length > 3 && (
+                        <div className="relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium">
+                          +{order.items.length - 3}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        Order #{order.orderNumber}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(order.createdAt)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatPrice(order.total)}</p>
+                      <Badge variant="secondary" className="mt-1">
+                        {order.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <CardDescription>
+              Common tasks and shortcuts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <Button variant="outline" className="justify-start" asChild>
+              <Link href="/account/orders">
+                <Icons.package className="mr-2 h-4 w-4" />
+                Track Orders
+              </Link>
+            </Button>
+            <Button variant="outline" className="justify-start" asChild>
+              <Link href="/account/addresses">
+                <Icons.mapPin className="mr-2 h-4 w-4" />
+                Manage Addresses
+              </Link>
+            </Button>
+            <Button variant="outline" className="justify-start" asChild>
+              <Link href="/account/payment-methods">
+                <Icons.creditCard className="mr-2 h-4 w-4" />
+                Payment Methods
+              </Link>
+            </Button>
+            <Button variant="outline" className="justify-start" asChild>
+              <Link href="/account/style-profile">
+                <Icons.sparkles className="mr-2 h-4 w-4" />
+                Update Style Profile
+              </Link>
+            </Button>
+            <Button variant="outline" className="justify-start" asChild>
+              <Link href="/support">
+                <Icons.helpCircle className="mr-2 h-4 w-4" />
+                Get Support
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recently Viewed */}
+      {dashboardData.recentlyViewed.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recently Viewed</CardTitle>
+                <CardDescription>
+                  Continue where you left off
+                </CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/products">
+                  Browse all
+                  <Icons.arrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
+              {dashboardData.recentlyViewed.map((view) => (
+                <Link
+                  key={view.id}
+                  href={`/products/${view.product.slug}`}
+                  className="group space-y-2"
+                >
+                  <div className="aspect-square overflow-hidden rounded-md bg-muted">
+                    {view.product.media[0] ? (
+                      <img
+                        src={view.product.media[0].thumbnailUrl || view.product.media[0].url}
+                        alt={view.product.name}
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Icons.package className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium line-clamp-1 group-hover:underline">
+                      {view.product.name}
+                    </p>
+                    <p className="text-sm font-medium">{formatPrice(view.product.price)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+```
+
+# src/app/account/settings/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import { getServerAuthSession } from '@/lib/auth'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Icons } from '@/components/ui/icons'
+import { ProfileSettingsForm } from '@/components/features/profile-settings-form'
+import { PasswordChangeForm } from '@/components/features/password-change-form'
+import { NotificationSettingsForm } from '@/components/features/notification-settings-form'
+import { PrivacySettingsForm } from '@/components/features/privacy-settings-form'
+
+export default async function SettingsPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/settings')
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground">
+          Manage your account settings and preferences
+        </p>
+      </div>
+
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="privacy">Privacy</TabsTrigger>
+          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Information</CardTitle>
+              <CardDescription>
+                Update your personal information
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ProfileSettingsForm user={session.user} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>
+                Update your password regularly to keep your account secure
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PasswordChangeForm />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Two-Factor Authentication</CardTitle>
+              <CardDescription>
+                Add an extra layer of security to your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Enable 2FA</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Require authentication code on sign in
+                  </p>
+                </div>
+                <Switch />
+              </div>
+              <Button variant="outline">
+                <Icons.smartphone className="mr-2 h-4 w-4" />
+                Configure 2FA
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Notifications</CardTitle>
+              <CardDescription>
+                Choose what emails you want to receive
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NotificationSettingsForm userId={session.user.id} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Privacy Settings</CardTitle>
+              <CardDescription>
+                Control how we use your data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PrivacySettingsForm userId={session.user.id} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Data Export</CardTitle>
+              <CardDescription>
+                Download a copy of your data
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                You can request a copy of all your data stored on LuxeVerse. This includes your
+                profile information, order history, and preferences.
+              </p>
+              <Button variant="outline">
+                <Icons.download className="mr-2 h-4 w-4" />
+                Request Data Export
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive">Delete Account</CardTitle>
+              <CardDescription>
+                Permanently delete your account and all associated data
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Once you delete your account, there is no going back. All your data will be
+                permanently removed.
+              </p>
+              <Button variant="destructive">
+                <Icons.trash className="mr-2 h-4 w-4" />
+                Delete Account
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="preferences" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Display Preferences</CardTitle>
+              <CardDescription>
+                Customize how LuxeVerse looks and feels
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="theme">Theme</Label>
+                <Select defaultValue="system">
+                  <SelectTrigger id="theme">
+                    <SelectValue placeholder="Select theme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Select defaultValue={session.user.preferredCurrency}>
+                  <SelectTrigger id="currency">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD - US Dollar</SelectItem>
+                    <SelectItem value="EUR">EUR - Euro</SelectItem>
+                    <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                    <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
+                    <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                    <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="language">Language</Label>
+                <Select defaultValue={session.user.preferredLanguage}>
+                  <SelectTrigger id="language">
+                    <SelectValue placeholder="Select language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Español</SelectItem>
+                    <SelectItem value="fr">Français</SelectItem>
+                    <SelectItem value="de">Deutsch</SelectItem>
+                    <SelectItem value="it">Italiano</SelectItem>
+                    <SelectItem value="ja">日本語</SelectItem>
+                    <SelectItem value="zh">中文</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="timezone">Timezone</Label>
+                <Select defaultValue={session.user.timezone}>
+                  <SelectTrigger id="timezone">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UTC">UTC</SelectItem>
+                    <SelectItem value="America/New_York">Eastern Time</SelectItem>
+                    <SelectItem value="America/Chicago">Central Time</SelectItem>
+                    <SelectItem value="America/Denver">Mountain Time</SelectItem>
+                    <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
+                    <SelectItem value="Europe/London">London</SelectItem>
+                    <SelectItem value="Europe/Paris">Paris</SelectItem>
+                    <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Shopping Preferences</CardTitle>
+              <CardDescription>
+                Customize your shopping experience
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Product Recommendations</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show AI-powered product recommendations
+                  </p>
+                </div>
+                <Switch defaultChecked />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Price Drop Alerts</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Notify when wishlist items go on sale
+                  </p>
+                </div>
+                <Switch defaultChecked />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Size Recommendations</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Use AI to suggest the best size for you
+                  </p>
+                </div>
+                <Switch defaultChecked />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Virtual Try-On</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable AR features when available
+                  </p>
+                </div>
+                <Switch defaultChecked />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+```
+
+# src/app/account/wishlist/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Icons } from '@/components/ui/icons'
+import { formatPrice } from '@/lib/utils'
+import { WishlistItemCard } from '@/components/features/wishlist-item-card'
+import { ShareWishlistDialog } from '@/components/features/share-wishlist-dialog'
+
+async function getWishlist(userId: string) {
+  const wishlist = await prisma.wishlist.findFirst({
+    where: { userId },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              media: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+              brand: true,
+              variants: {
+                where: { isAvailable: true },
+                orderBy: { price: 'asc' },
+                take: 1,
+              },
+            },
+          },
+          variant: true,
+        },
+        orderBy: { addedAt: 'desc' },
+      },
+    },
+  })
+
+  // Create default wishlist if it doesn't exist
+  if (!wishlist) {
+    return await prisma.wishlist.create({
+      data: {
+        userId,
+        name: 'My Wishlist',
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                media: true,
+                brand: true,
+                variants: true,
+              },
+            },
+            variant: true,
+          },
+        },
+      },
+    })
+  }
+
+  return wishlist
+}
+
+export default async function WishlistPage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/wishlist')
+  }
+
+  const wishlist = await getWishlist(session.user.id)
+
+  // Calculate stats
+  const totalValue = wishlist.items.reduce((sum, item) => {
+    const price = item.variant?.price || item.product.price
+    return sum + Number(price)
+  }, 0)
+
+  const itemsInStock = wishlist.items.filter(item => {
+    const variant = item.variant || item.product.variants[0]
+    return variant && variant.inventoryQuantity > 0
+  }).length
+
+  const itemsOnSale = wishlist.items.filter(item => 
+    item.product.compareAtPrice && item.product.compareAtPrice > item.product.price
+  ).length
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">My Wishlist</h1>
+          <p className="text-muted-foreground">
+            Save items for later and track price changes
+          </p>
+        </div>
+        <ShareWishlistDialog wishlist={wishlist} />
+      </div>
+
+      {/* Wishlist Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+            <Icons.heart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{wishlist.items.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            <Icons.dollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatPrice(totalValue)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">In Stock</CardTitle>
+            <Icons.checkCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{itemsInStock}</div>
+            <p className="text-xs text-muted-foreground">
+              Ready to purchase
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">On Sale</CardTitle>
+            <Icons.tag className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{itemsOnSale}</div>
+            <p className="text-xs text-muted-foreground">
+              Price reduced
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Wishlist Items */}
+      {wishlist.items.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.heart className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">Your wishlist is empty</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Save items you love to purchase later
+            </p>
+            <Button className="mt-6" asChild>
+              <Link href="/products">Browse Products</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {wishlist.items.length} {wishlist.items.length === 1 ? 'item' : 'items'} saved
+            </p>
+            <Button variant="outline" size="sm">
+              <Icons.shoppingBag className="mr-2 h-4 w-4" />
+              Add All to Cart
+            </Button>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {wishlist.items.map((item) => (
+              <WishlistItemCard
+                key={item.id}
+                item={item}
+                wishlistId={wishlist.id}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Recommendations */}
+      {wishlist.items.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>You Might Also Like</CardTitle>
+            <CardDescription>
+              Based on items in your wishlist
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Add AI recommendations component here */}
+            <p className="text-sm text-muted-foreground">
+              Recommendations coming soon...
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+```
+
+# src/app/account/layout.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getServerAuthSession } from '@/lib/auth'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Icons } from '@/components/ui/icons'
+
+const accountNavItems = [
+  {
+    title: 'Dashboard',
+    href: '/account',
+    icon: Icons.layoutDashboard,
+  },
+  {
+    title: 'Orders',
+    href: '/account/orders',
+    icon: Icons.package,
+  },
+  {
+    title: 'Wishlist',
+    href: '/account/wishlist',
+    icon: Icons.heart,
+  },
+  {
+    title: 'Addresses',
+    href: '/account/addresses',
+    icon: Icons.mapPin,
+  },
+  {
+    title: 'Payment Methods',
+    href: '/account/payment-methods',
+    icon: Icons.creditCard,
+  },
+  {
+    title: 'Style Profile',
+    href: '/account/style-profile',
+    icon: Icons.sparkles,
+  },
+  {
+    title: 'Reviews',
+    href: '/account/reviews',
+    icon: Icons.star,
+  },
+  {
+    title: 'Settings',
+    href: '/account/settings',
+    icon: Icons.settings,
+  },
+]
+
+interface AccountLayoutProps {
+  children: React.ReactNode
+}
+
+export default async function AccountLayout({ children }: AccountLayoutProps) {
+  const session = await getServerAuthSession()
+
+  if (!session) {
+    redirect('/login?callbackUrl=/account')
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container flex-1 items-start md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10">
+        <aside className="fixed top-14 z-30 -ml-2 hidden h-[calc(100vh-3.5rem)] w-full shrink-0 overflow-y-auto border-r md:sticky md:block">
+          <ScrollArea className="py-6 pr-6 lg:py-8">
+            <div className="mb-6 px-3">
+              <div className="flex items-center space-x-4">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={session.user.avatarUrl || undefined} alt={session.user.name || 'User'} />
+                  <AvatarFallback>
+                    {session.user.name?.charAt(0) || session.user.email?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                  <p className="text-sm text-muted-foreground">{session.user.email}</p>
+                  <div className="flex items-center space-x-1">
+                    <Icons.gem className="h-3 w-3 text-primary" />
+                    <span className="text-xs font-medium capitalize">{session.user.membershipTier} Member</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <nav className="grid items-start gap-2">
+              {accountNavItems.map((item) => (
+                <Button
+                  key={item.href}
+                  variant="ghost"
+                  className="w-full justify-start"
+                  asChild
+                >
+                  <Link href={item.href}>
+                    <item.icon className="mr-2 h-4 w-4" />
+                    {item.title}
+                  </Link>
+                </Button>
+              ))}
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                asChild
+              >
+                <Link href="/api/auth/signout">
+                  <Icons.logOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </Link>
+              </Button>
+            </nav>
+          </ScrollArea>
+        </aside>
+        <main className="relative py-6 lg:gap-10 lg:py-8 xl:grid">
+          <div className="mx-auto w-full min-w-0">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+```
+
+# src/app/account/style-profile/page.tsx
+```tsx
+import { redirect } from 'next/navigation'
+import { getServerAuthSession } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Icons } from '@/components/ui/icons'
+import { StyleQuizDialog } from '@/components/features/style-quiz-dialog'
+import { StylePreferencesForm } from '@/components/features/style-preferences-form'
+
+async function getStyleProfile(userId: string) {
+  return await prisma.styleProfile.findUnique({
+    where: { userId },
+  })
+}
+
+export default async function StyleProfilePage() {
+  const session = await getServerAuthSession()
+  
+  if (!session) {
+    redirect('/login?callbackUrl=/account/style-profile')
+  }
+
+  const styleProfile = await getStyleProfile(session.user.id)
+  const profileCompleteness = styleProfile ? calculateCompleteness(styleProfile) : 0
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Style Profile</h1>
+          <p className="text-muted-foreground">
+            Help our AI understand your unique style
+          </p>
+        </div>
+        {!styleProfile && <StyleQuizDialog />}
+      </div>
+
+      {!styleProfile ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Icons.sparkles className="h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-medium">Create Your Style Profile</h3>
+            <p className="mt-2 text-center text-sm text-muted-foreground">
+              Take a quick quiz to help us personalize your shopping experience
+            </p>
+            <StyleQuizDialog>
+              <Button className="mt-6">
+                <Icons.sparkles className="mr-2 h-4 w-4" />
+                Take Style Quiz
+              </Button>
+            </StyleQuizDialog>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Profile Completeness */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Completeness</CardTitle>
+              <CardDescription>
+                The more complete your profile, the better our recommendations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>{profileCompleteness}% Complete</span>
+                <span className="text-muted-foreground">
+                  {profileCompleteness < 100 && 'Add more details for better matches'}
+                </span>
+              </div>
+              <Progress value={profileCompleteness} />
+            </CardContent>
+          </Card>
+
+          {/* Style Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Style Summary</CardTitle>
+              <CardDescription>
+                Based on your preferences and shopping history
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Style Personas */}
+              <div>
+                <p className="text-sm font-medium mb-2">Style Personas</p>
+                <div className="flex flex-wrap gap-2">
+                  {styleProfile.stylePersonas.map((persona) => (
+                    <Badge key={persona} variant="secondary">
+                      {persona}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Favorite Colors */}
+              <div>
+                <p className="text-sm font-medium mb-2">Favorite Colors</p>
+                <div className="flex flex-wrap gap-2">
+                  {styleProfile.favoriteColors.map((color) => (
+                    <div
+                      key={color}
+                      className="flex items-center gap-2 rounded-md border px-2 py-1"
+                    >
+                      <div
+                        className="h-4 w-4 rounded-full border"
+                        style={{ backgroundColor: color.toLowerCase() }}
+                      />
+                      <span className="text-sm">{color}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preferred Brands */}
+              {styleProfile.preferredBrands.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">Preferred Brands</p>
+                  <div className="flex flex-wrap gap-2">
+                    {styleProfile.preferredBrands.map((brand) => (
+                      <Badge key={brand} variant="outline">
+                        {brand}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Price Range */}
+              <div>
+                <p className="text-sm font-medium mb-2">Typical Budget</p>
+                <p className="text-sm text-muted-foreground">
+                  ${styleProfile.minPricePreference} - ${styleProfile.maxPricePreference}
+                  {styleProfile.sweetSpotPrice && (
+                    <span> (Sweet spot: ${styleProfile.sweetSpotPrice})</span>
+                  )}
+                </p>
+              </div>
+
+              {/* Preferences */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  {styleProfile.prefersSustainable ? (
+                    <Icons.checkCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Icons.xCircle className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span>Sustainable Fashion</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {styleProfile.prefersExclusive ? (
+                    <Icons.checkCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Icons.xCircle className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span>Exclusive Items</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Edit Preferences */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Update Preferences</CardTitle>
+              <CardDescription>
+                Fine-tune your style profile
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StylePreferencesForm styleProfile={styleProfile} />
+            </CardContent>
+          </Card>
+
+          {/* AI Insights */}
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Style Insights</CardTitle>
+              <CardDescription>
+                What we've learned about your style
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Early Adopter Score</p>
+                  <Progress value={Number(styleProfile.earlyAdopterScore) * 100} />
+                  <p className="text-xs text-muted-foreground">
+                    {Number(styleProfile.earlyAdopterScore) > 0.7
+                      ? 'You love trying new trends'
+                      : Number(styleProfile.earlyAdopterScore) > 0.4
+                      ? 'You balance trends with classics'
+                      : 'You prefer timeless pieces'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Luxury Affinity</p>
+                  <Progress value={Number(styleProfile.luxuryAffinityScore) * 100} />
+                  <p className="text-xs text-muted-foreground">
+                    {Number(styleProfile.luxuryAffinityScore) > 0.7
+                      ? 'You appreciate premium quality'
+                      : Number(styleProfile.luxuryAffinityScore) > 0.4
+                      ? 'You mix luxury with accessible pieces'
+                      : 'You prioritize value and practicality'}
+                  </p>
+                </div>
+              </div>
+              
+              <Button variant="outline" className="w-full">
+                <Icons.sparkles className="mr-2 h-4 w-4" />
+                Get Personalized Style Report
+              </Button>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}
+
+function calculateCompleteness(profile: any): number {
+  let score = 0
+  const weights = {
+    stylePersonas: 20,
+    favoriteColors: 15,
+    avoidedColors: 10,
+    preferredBrands: 15,
+    avoidedMaterials: 10,
+    measurements: 15,
+    pricePreferences: 15,
+  }
+
+  if (profile.stylePersonas.length > 0) score += weights.stylePersonas
+  if (profile.favoriteColors.length > 0) score += weights.favoriteColors
+  if (profile.avoidedColors.length > 0) score += weights.avoidedColors
+  if (profile.preferredBrands.length > 0) score += weights.preferredBrands
+  if (profile.avoidedMaterials.length > 0) score += weights.avoidedMaterials
+  if (profile.measurements) score += weights.measurements
+  if (profile.minPricePreference && profile.maxPricePreference) {
+    score += weights.pricePreferences
+  }
+
+  return Math.round(score)
 }
 
 ```
